@@ -51,6 +51,23 @@ pub const PRIVATE_IP_CIDRS: &[&str] = &[
     "fe80::/10",
 ];
 
+/// Telegram 官方 DC / API 网段。桌面客户端直连这些 IP，不走域名，
+/// 只有 geosite-telegram 会漏掉，TUN 下表现为 SYN_SENT、App 一直「正在连接」。
+pub const TELEGRAM_DC_IP_CIDRS: &[&str] = &[
+    "91.108.4.0/22",
+    "91.108.8.0/22",
+    "91.108.12.0/22",
+    "91.108.16.0/22",
+    "91.108.20.0/22",
+    "91.108.56.0/22",
+    "149.154.160.0/20",
+    "185.76.151.0/24",
+    "2001:67c:4e8::/48",
+    "2001:b28:f23c::/48",
+    "2001:b28:f23d::/48",
+    "2001:b28:f23f::/48",
+];
+
 pub fn kernel_log_output_path() -> String {
     paths::get_kernel_work_dir()
         .join("sing-box.log")

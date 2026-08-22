@@ -76,11 +76,11 @@ impl Default for AppConfig {
             tray_instance_id: None,
             system_proxy_bypass: DEFAULT_BYPASS_LIST.to_string(),
             tun_auto_route: true,
-            tun_strict_route: true,
+            tun_strict_route: false,
             tun_mtu: 1500,
             tun_ipv4: "172.19.0.1/30".to_string(),
             tun_ipv6: "fdfe:dcba:9876::1/126".to_string(),
-            tun_stack: "mixed".to_string(),
+            tun_stack: "gvisor".to_string(),
             // 新安装默认关闭：避免首次安装即启用 IPv6 TUN 造成意外行为
             tun_enable_ipv6: false,
             tun_route_exclude_address: None,

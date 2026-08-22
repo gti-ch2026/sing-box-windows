@@ -81,8 +81,12 @@ impl Default for TunProxyOptions {
             ipv6_address: DEFAULT_TUN_IPV6.to_string(),
             mtu: 1500,
             auto_route: true,
-            strict_route: true,
-            stack: "mixed".to_string(),
+            // 本机常有系统 VPN（Shadowrocket）。strict_route 会抢走全部默认路由，
+            // 又拦不住对方的 utun，Telegram 就会卡在 SYN_SENT。先关严格路由，让出站还能走物理网卡。
+            strict_route: false,
+            // macOS 上 mixed/system 栈经常接住 UDP DNS，却把 Telegram 的 TCP 丢在 SYN_SENT。
+            // gvisor 用户态协议栈能把 TCP 真正送进 sing-box。
+            stack: "gvisor".to_string(),
             enable_ipv6: true,
             route_exclude_address: None,
             interface_name: None,
@@ -108,11 +112,14 @@ impl TunProfile {
         options: &TunProxyOptions,
         route_exclude_address_override: Option<&[String]>,
     ) -> Self {
+        // macOS 上不要猜 utun 编号：小火箭已经占着系统 VPN 的 utun，
+        // 写死 utun28 会和系统接口撞车，流量进来转不出去（Telegram SYN_SENT）。
+        // 交给 sing-box 自己创建空闲 utun。
         let interface_name = options
             .interface_name
             .clone()
             .filter(|name| !name.trim().is_empty())
-            .unwrap_or_else(default_interface_name);
+            .unwrap_or_default();
 
         let ipv6_address = if options.enable_ipv6 && !options.ipv6_address.trim().is_empty() {
             Some(options.ipv6_address.clone())
@@ -168,7 +175,11 @@ impl TunProfile {
                 r#type: "tun".to_string(),
                 tag: "tun-in".to_string(),
                 listen: None,
-                interface_name: Some(self.interface_name.clone()),
+                interface_name: if self.interface_name.trim().is_empty() {
+                    None
+                } else {
+                    Some(self.interface_name.clone())
+                },
                 listen_port: None,
                 address: Some(self.address_list()),
                 auto_route: Some(self.auto_route),
@@ -213,21 +224,7 @@ fn normalize_stack(stack: &str) -> String {
     }
 }
 
-fn default_interface_name() -> String {
-    #[cfg(target_os = "macos")]
-    {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        if let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) {
-            let idx = (duration.subsec_millis() % 90) + 5;
-            return format!("utun{}", idx);
-        }
-        "utun5".to_string()
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        "singbox_tun".to_string()
-    }
-}
+
 
 #[cfg(test)]
 mod tests {

@@ -136,8 +136,13 @@ export const useKernelStore = defineStore('kernel', () => {
     const snapshot = await kernelService.getKernelSnapshot()
     applyStatus(snapshot)
 
-    // 3. 移除主动轮询，完全依赖后端事件推送
-    // 用户反馈：直接选用推送即可，无需主动定时查询
+    // 3. 再拉一次完整状态：快照可能缺 process_running，避免首页卡在「启动中」
+    try {
+      const latest = await kernelService.getKernelStatus()
+      applyStatus(latest)
+    } catch (error) {
+      console.warn('刷新内核状态失败:', error)
+    }
 
     // 4. Eager load available versions for better UX (dropdown ready on open)
     if (availableVersions.value.length === 0) {
@@ -276,15 +281,26 @@ export const useKernelStore = defineStore('kernel', () => {
     return compareVersion(latestAvailableVersion.value, status.value.version) > 0
   })
 
-  const isRunning = computed(() => status.value.process_running)
+  const isRunning = computed(
+    () => status.value.process_running || status.value.kernel_state === 'running',
+  )
   const isReady = computed(
     () => status.value.process_running && status.value.api_ready && status.value.websocket_ready,
   )
   const startupDiagnosisSummary = computed(
     () => startupDiagnosis.value?.message || startupDiagnosis.value?.detail || '',
   )
-  const isStarting = computed(() => isLoading.value && !isRunning.value)
-  const isStopping = computed(() => isLoading.value && isRunning.value)
+  // 内核已经在跑就不要再显示「启动中」。isLoading 只表示用户点了重启，按钮转圈即可。
+  const isStarting = computed(
+    () =>
+      !isRunning.value &&
+      (status.value.kernel_state === 'starting' || (isLoading.value && !isRunning.value)),
+  )
+  const isStopping = computed(
+    () =>
+      isRunning.value &&
+      (status.value.kernel_state === 'stopping' || (isLoading.value && isRunning.value)),
+  )
   const uptime = computed(() => {
     const ms = status.value.uptime_ms || 0
     const seconds = Math.floor(ms / 1000)

@@ -42,7 +42,11 @@ pub fn extract_nodes_from_subscription(
 
                     match outbound_type {
                         Some(outbound_type) if is_supported_outbound_type(outbound_type) => {
-                            nodes.push(node_with_tag);
+                            if !is_subscription_metadata_tag(
+                                node_with_tag.get("tag").and_then(|t| t.as_str()).unwrap_or(""),
+                            ) {
+                                nodes.push(node_with_tag);
+                            }
                         }
                         _ => {}
                     }
@@ -319,6 +323,14 @@ fn is_supported_outbound_type(node_type: &str) -> bool {
             | "tuic"
             | "anytls"
     )
+}
+
+fn is_subscription_metadata_tag(tag: &str) -> bool {
+    let upper = tag.trim().to_ascii_uppercase();
+    upper.starts_with("STATUS=")
+        || upper.starts_with("REMARKS=")
+        || upper.starts_with("EXPIRE:")
+        || upper.starts_with("TRAFFIC:")
 }
 
 /// 从 Clash 节点对象构造 TLS 配置（hysteria2/tuic/anytls 共用）。
@@ -644,6 +656,14 @@ fn extract_nodes_from_uri_list(content: &str) -> Vec<Value> {
 
         // 常见订阅会在末尾附带 “# remark”，或混入注释行
         if line.starts_with('#') {
+            continue;
+        }
+        let upper = line.to_ascii_uppercase();
+        if upper.starts_with("STATUS=")
+            || upper.starts_with("REMARKS=")
+            || upper.starts_with("EXPIRE:")
+            || upper.starts_with("TRAFFIC:")
+        {
             continue;
         }
 

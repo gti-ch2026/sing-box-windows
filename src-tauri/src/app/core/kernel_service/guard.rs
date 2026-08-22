@@ -17,6 +17,8 @@ use tracing::{info, warn};
 static KEEP_ALIVE_ENABLED: AtomicBool = AtomicBool::new(false);
 static GUARDED_API_PORT: AtomicU16 = AtomicU16::new(0);
 static GUARDED_TUN_ENABLED: AtomicBool = AtomicBool::new(false);
+static GUARDED_SYSTEM_PROXY: AtomicBool = AtomicBool::new(false);
+static GUARDED_PROXY_PORT: AtomicU16 = AtomicU16::new(12080);
 
 /// 连通性自愈：连续失败达到该阈值即触发一次内核重启。
 const CONNECTIVITY_FAIL_THRESHOLD: u8 = 3;
@@ -150,11 +152,20 @@ fn shutdown_guard() {
     KEEP_ALIVE_ENABLED.store(false, Ordering::Relaxed);
     GUARDED_API_PORT.store(0, Ordering::Relaxed);
     GUARDED_TUN_ENABLED.store(false, Ordering::Relaxed);
+    GUARDED_SYSTEM_PROXY.store(false, Ordering::Relaxed);
 }
 
-pub(super) async fn enable_kernel_guard(app_handle: AppHandle, api_port: u16, tun_enabled: bool) {
+pub(super) async fn enable_kernel_guard_with_proxy(
+    app_handle: AppHandle,
+    api_port: u16,
+    tun_enabled: bool,
+    system_proxy_enabled: bool,
+    proxy_port: u16,
+) {
     GUARDED_API_PORT.store(api_port, Ordering::Relaxed);
     GUARDED_TUN_ENABLED.store(tun_enabled, Ordering::Relaxed);
+    GUARDED_SYSTEM_PROXY.store(system_proxy_enabled, Ordering::Relaxed);
+    GUARDED_PROXY_PORT.store(if proxy_port == 0 { 12080 } else { proxy_port }, Ordering::Relaxed);
     if KEEP_ALIVE_ENABLED.swap(true, Ordering::Relaxed) {
         return;
     }
@@ -163,6 +174,15 @@ pub(super) async fn enable_kernel_guard(app_handle: AppHandle, api_port: u16, tu
 
     let mut handle_slot = KERNEL_GUARD_HANDLE.lock().await;
     *handle_slot = Some(guard_handle);
+}
+
+/// 内核已在跑时，用户切换系统代理开关也要同步给守护，否则关不掉接管、开了也不会抢。
+pub fn update_guarded_proxy_flags(system_proxy_enabled: bool, tun_enabled: bool, proxy_port: u16) {
+    GUARDED_SYSTEM_PROXY.store(system_proxy_enabled, Ordering::Relaxed);
+    GUARDED_TUN_ENABLED.store(tun_enabled, Ordering::Relaxed);
+    if proxy_port != 0 {
+        GUARDED_PROXY_PORT.store(proxy_port, Ordering::Relaxed);
+    }
 }
 
 /// 启动守护循环任务。
@@ -176,6 +196,7 @@ fn spawn_guard_loop(app_handle: AppHandle) -> JoinHandle<()> {
         let mut connectivity_failures: u8 = 0;
         let mut next_self_heal_at = Instant::now() + Duration::from_secs(SELF_HEAL_WARMUP_SECS);
         let mut last_log_rotation_at = Instant::now();
+        let mut last_had_vpn_conflict = false;
 
         loop {
             if !KEEP_ALIVE_ENABLED.load(Ordering::Relaxed) {
@@ -199,6 +220,15 @@ fn spawn_guard_loop(app_handle: AppHandle) -> JoinHandle<()> {
 
             match is_kernel_running().await {
                 Ok(true) => {
+                    // 内核在跑就持续把 HTTP/SOCKS 和残留 1082 抢回 Pika。
+                    // 客户关小火箭节点后，Agent 仍可能指着 1082；必须一直接管。
+                    let port = GUARDED_PROXY_PORT.load(Ordering::Relaxed);
+                    crate::app::system::vpn_conflict::reclaim_or_warn_system_proxy(
+                        &app_handle,
+                        if port == 0 { 12080 } else { port },
+                        &mut last_had_vpn_conflict,
+                    );
+
                     // 所有代理模式都做连通性自愈：进程活着但假死时也能恢复。
                     let policy = load_self_heal_policy(&app_handle).await;
                     if !policy.enabled {
@@ -320,6 +350,7 @@ pub(super) async fn disable_kernel_guard() {
 
     GUARDED_API_PORT.store(0, Ordering::Relaxed);
     GUARDED_TUN_ENABLED.store(false, Ordering::Relaxed);
+    GUARDED_SYSTEM_PROXY.store(false, Ordering::Relaxed);
     let mut handle_slot = KERNEL_GUARD_HANDLE.lock().await;
     if let Some(handle) = handle_slot.take() {
         handle.abort();

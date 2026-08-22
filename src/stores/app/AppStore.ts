@@ -292,10 +292,8 @@ export const useAppStore = defineStore(
       switch (targetMode) {
         case 'system':
           systemProxyEnabled.value = true
-          tunEnabled.value = false
           break
         case 'tun':
-          systemProxyEnabled.value = false
           tunEnabled.value = true
           break
         case 'manual':

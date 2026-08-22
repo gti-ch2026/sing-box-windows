@@ -4,7 +4,7 @@ use super::common::{
     DNS_FAKEIP, DNS_PROXY, DNS_RESOLVER, FAKE_DNS_FILTER_GLOBAL_NON_CN, PRIVATE_IP_CIDRS,
     RS_GEOIP_CN, RS_GEOSITE_ADS, RS_GEOSITE_CN, RS_GEOSITE_GEOLOCATION_NOT_CN, RS_GEOSITE_GOOGLE,
     RS_GEOSITE_NETFLIX, RS_GEOSITE_OPENAI, RS_GEOSITE_PRIVATE, RS_GEOSITE_TELEGRAM,
-    RS_GEOSITE_YOUTUBE,
+    RS_GEOSITE_YOUTUBE, TELEGRAM_DC_IP_CIDRS,
 };
 use super::config_schema::{
     CacheFileConfig, ClashApiConfig, DnsConfig, DnsServerConfig, ExperimentalConfig, LogConfig,
@@ -194,6 +194,7 @@ pub fn generate_base_config(app_config: &AppConfig) -> Value {
     if app_config.singbox_enable_app_groups {
         route_rules.extend([
             json!({ "rule_set": RS_GEOSITE_TELEGRAM, "outbound": TAG_TELEGRAM }),
+            json!({ "ip_cidr": TELEGRAM_DC_IP_CIDRS, "outbound": TAG_TELEGRAM }),
             json!({ "rule_set": RS_GEOSITE_YOUTUBE, "outbound": TAG_YOUTUBE }),
             json!({ "rule_set": RS_GEOSITE_NETFLIX, "outbound": TAG_NETFLIX }),
             json!({ "rule_set": RS_GEOSITE_OPENAI, "outbound": TAG_OPENAI }),
