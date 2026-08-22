@@ -17,6 +17,15 @@ export default {
     enabled: 'オン',
     disabled: 'オフ',
   },
+  login: {
+    brand: 'Pika',
+    lead: 'ウェブサイトと同じメールまたは Telegram ユーザー名でログインしてください。',
+    account: 'アカウント',
+    accountPlaceholder: 'メールまたは @ユーザー名',
+    password: 'パスワード',
+    passwordPlaceholder: 'パスワード',
+    submit: 'ログイン',
+  },
 
   // 导航菜单
   nav: {
@@ -48,6 +57,12 @@ export default {
 
   // 首页
   home: {
+    quotaTitle: '残り容量',
+    quotaPlan: 'プラン',
+    quotaExpire: '期限',
+    quotaUsed: '使用量',
+    quotaRemaining: '残り',
+    quotaUnlimited: '無制限',
     kernelHealthy: 'Kernel healthy',
     kernelUnhealthy: 'Kernel has issues',
     kernelCheckedAt: 'Last checked',
@@ -109,7 +124,7 @@ export default {
     // 流量代理模式
     proxyMode: {
       system: 'システムプロキシ',
-      tun: 'TUNモード',
+      tun: '全体加速',
       manual: '手動モード',
       systemTip: 'システムプロキシを自動設定',
       tunTip: 'TUN仮想ネットワークカードを使用してすべてのトラフィックをプロキシ、管理者権限が必要',

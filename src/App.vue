@@ -39,6 +39,7 @@ import {
   useKernelStore,
   useUpdateStore,
   useSubStore,
+  usePikaAccountStore,
   useTrafficStore,
   useConnectionStore,
   useLogStore,
@@ -63,6 +64,7 @@ const appStore = useAppStore()
 const localeStore = useLocaleStore()
 const windowStore = useWindowStore()
 const subStore = useSubStore()
+const pikaAccountStore = usePikaAccountStore()
 const kernelStore = useKernelStore()
 const updateStore = useUpdateStore()
 const trafficStore = useTrafficStore()

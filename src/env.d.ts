@@ -7,6 +7,7 @@ declare module '*.png' {
 
 interface ImportMetaEnv {
   readonly VITE_APP_TITLE: string
+  readonly VITE_PIKA_CONTROL_PLANE_URL?: string
   readonly BASE_URL: string
   readonly DEV: boolean
   readonly PROD: boolean

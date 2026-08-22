@@ -17,6 +17,15 @@ export default {
     enabled: 'Вкл',
     disabled: 'Выкл',
   },
+  login: {
+    brand: 'Pika',
+    lead: 'Войдите тем же email или Telegram-именем, что и на сайте.',
+    account: 'Аккаунт',
+    accountPlaceholder: 'Email или @username',
+    password: 'Пароль',
+    passwordPlaceholder: 'Пароль',
+    submit: 'Войти',
+  },
 
   // 导航菜单
   nav: {
@@ -48,6 +57,12 @@ export default {
 
   // 首页
   home: {
+    quotaTitle: 'Остаток',
+    quotaPlan: 'Тариф',
+    quotaExpire: 'Истекает',
+    quotaUsed: 'Использовано',
+    quotaRemaining: 'Осталось',
+    quotaUnlimited: 'Безлимит',
     kernelHealthy: 'Kernel healthy',
     kernelUnhealthy: 'Kernel has issues',
     kernelCheckedAt: 'Last checked',
@@ -112,7 +127,7 @@ export default {
     // 代理模式
     proxyMode: {
       system: 'Системный прокси',
-      tun: 'TUN режим',
+      tun: 'Полный туннель',
       manual: 'Ручной режим',
       systemTip: 'Автоматическая настройка системного прокси',
       tunTip:

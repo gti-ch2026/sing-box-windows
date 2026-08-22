@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "sing-box-windows",
+  "productName": "Pika",
   "version": "2.3.1",
-  "identifier": "cn.moncn.singbox",
+  "identifier": "app.pika.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:6221",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "sing-box-windows",
+        "title": "Pika",
         "width": 1024,
         "height": 700,
         "minWidth": 1024,

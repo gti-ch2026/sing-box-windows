@@ -41,6 +41,11 @@ export interface AppBootstrapDeps {
       initializeStore: () => Promise<void>
       getActiveSubscription: () => { configPath?: string; useOriginalConfig?: boolean } | null
     }
+    pikaAccountStore?: {
+      hydrate: () => void
+      loggedIn: boolean
+      refresh: () => Promise<void>
+    }
     kernelStore: { initializeStore: () => Promise<void> }
     updateStore: {
       initializeStore: () => Promise<void>
@@ -178,6 +183,16 @@ export function useAppBootstrap(deps: AppBootstrapDeps) {
     await appStore.initializeStore()
 
     await subStore.initializeStore()
+    try {
+      const { usePikaAccountStore } = await import('@/stores/pika/AccountStore')
+      const account = usePikaAccountStore()
+      account.hydrate()
+      if (account.loggedIn) {
+        await account.refresh()
+      }
+    } catch (error) {
+      console.warn('刷新 Pika 官方线路失败:', error)
+    }
     // 启动时优先使用 AppConfig.active_config_path（内核实际读取的“权威值”），
     // 再回退到订阅 Store 的高亮项，避免出现“高亮与内核配置不一致”。
     const activeSub = subStore.getActiveSubscription()

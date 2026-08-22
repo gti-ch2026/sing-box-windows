@@ -27,8 +27,8 @@
             <div class="sub-info">
               <div class="sub-name" :title="item.name">{{ item.name }}</div>
               <div class="sub-tags">
-                <n-tag size="small" :bordered="false" round>
-                  {{ item.isManual ? t('sub.manual') : t('sub.urlSubscription') }}
+                <n-tag size="small" :bordered="false" round :type="item.name === 'Pika 官方线路' ? 'info' : 'default'">
+                  {{ item.name === 'Pika 官方线路' ? 'Pika 官方' : item.isManual ? t('sub.manual') : t('sub.urlSubscription') }}
                 </n-tag>
                 <n-tag
                   v-if="subStore.activeIndex === index"

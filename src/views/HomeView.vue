@@ -35,6 +35,24 @@
             </n-tooltip>
           </div>
         </div>
+        <div v-if="account.loggedIn" class="quota-row">
+          <div class="quota-item">
+            <span class="quota-label">{{ t('home.quotaPlan') }}</span>
+            <strong>{{ account.session?.planName || '—' }}</strong>
+          </div>
+          <div class="quota-item">
+            <span class="quota-label">{{ t('home.quotaExpire') }}</span>
+            <strong>{{ quotaExpireText }}</strong>
+          </div>
+          <div class="quota-item">
+            <span class="quota-label">{{ t('home.quotaUsed') }}</span>
+            <strong>{{ quotaUsedText }}</strong>
+          </div>
+          <div class="quota-item">
+            <span class="quota-label">{{ t('home.quotaRemaining') }}</span>
+            <strong>{{ quotaRemainingText }}</strong>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -225,6 +243,7 @@ import {
   SpeedometerOutline,
 } from '@vicons/ionicons5'
 import { useAppStore } from '@/stores'
+import { usePikaAccountStore } from '@/stores/pika/AccountStore'
 import { useKernelStore } from '@/stores/kernel/KernelStore'
 import { useTrafficStore } from '@/stores/kernel/TrafficStore'
 import { useConnectionStore } from '@/stores/kernel/ConnectionStore'
@@ -247,6 +266,7 @@ defineOptions({
 const { t } = useI18n()
 const message = useMessage()
 const dialog = useDialog()
+const account = usePikaAccountStore()
 
 const appStore = useAppStore()
 const kernelStore = useKernelStore()
@@ -308,6 +328,19 @@ const statusDescription = computed(() => {
     default:
       return t('home.kernelStatusDescriptions.stoppedDesc')
   }
+})
+
+const quotaExpireText = computed(() => {
+  const expireAt = account.session?.expireAt ?? 0
+  if (expireAt <= 0) return '—'
+  return new Date(expireAt * 1000).toLocaleDateString()
+})
+const quotaUsedText = computed(() => formatBytes(account.usedBytes))
+const quotaRemainingText = computed(() => {
+  if (!account.session || account.session.totalBytes <= 0) {
+    return t('home.quotaUnlimited')
+  }
+  return formatBytes(account.remainingBytes)
 })
 
 const systemProxyEnabled = computed(() => appStore.systemProxyEnabled)
@@ -482,8 +515,35 @@ const enableTunWithKernelRestart = async (options?: { allowSudoRetry?: boolean }
   }
 }
 
+const resolvePlatform = async () => {
+  try {
+    const raw = await systemService.getPlatformInfo()
+    if (raw === 'windows' || raw === 'linux' || raw === 'macos') {
+      platform.value = raw
+      return raw
+    }
+  } catch {
+    // fall through to UA
+  }
+  const ua = navigator.userAgent.toLowerCase()
+  if (ua.includes('mac')) {
+    platform.value = 'macos'
+    return 'macos'
+  }
+  if (ua.includes('windows')) {
+    platform.value = 'windows'
+    return 'windows'
+  }
+  if (ua.includes('linux')) {
+    platform.value = 'linux'
+    return 'linux'
+  }
+  return platform.value
+}
+
 const toggleTunProxy = async (value: boolean) => {
   if (modeSwitchPending.value) return
+  await resolvePlatform()
 
   if (value) {
     if (isWindowsPlatform.value) {
@@ -494,9 +554,12 @@ const toggleTunProxy = async (value: boolean) => {
       } else {
         await confirmTunSwitch()
       }
-    } else if (isUnixPlatform.value) {
-      const status = await sudoService.getStatus()
-      if (!status.supported) {
+    } else if (isUnixPlatform.value || platform.value === 'unknown') {
+      // 先弹密码，避免 getStatus 卡住时按钮看起来没反应。
+      const status = await sudoService
+        .getStatus()
+        .catch(() => ({ supported: true, has_saved: false }))
+      if (status.supported === false) {
         message.error(t('home.sudoPassword.unsupported'))
         return
       }
@@ -616,16 +679,16 @@ const checkAdmin = async () => {
 }
 
 onMounted(async () => {
-  try {
-    const raw = await systemService.getPlatformInfo()
-    platform.value = raw === 'windows' || raw === 'linux' || raw === 'macos' ? raw : 'unknown'
-  } catch {
-    platform.value = 'unknown'
-  }
+  await resolvePlatform()
   checkAdmin()
   await kernelStore.initializeStore()
   await proxyStore.fetchProxies().catch(() => undefined)
   await syncCurrentNodeProxyMode()
+  // 客户要的是点一下全机都能用。系统 HTTP 代理管不了 Telegram，
+  // 内核跑着就自动切到 TUN，接管默认路由。
+  if (kernelRunning.value && !tunProxyEnabled.value) {
+    void toggleTunProxy(true)
+  }
 })
 </script>
 
@@ -677,6 +740,37 @@ onMounted(async () => {
 
 .hero-inner {
   position: relative;
+}
+
+.quota-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.quota-item {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--primary-soft, rgba(99, 102, 241, 0.08));
+}
+
+.quota-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary, #475569);
+  margin-bottom: 4px;
+}
+
+.quota-item strong {
+  color: var(--text-primary, #0f172a);
+  font-size: 16px;
+}
+
+@media (max-width: 900px) {
+  .quota-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .hero-top {

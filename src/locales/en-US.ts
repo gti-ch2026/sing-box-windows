@@ -1,6 +1,6 @@
 export default {
   common: {
-    appName: 'Sing-Box Windows',
+    appName: 'Pika',
     cancel: 'Cancel',
     save: 'Save',
     saveSuccess: 'Saved successfully',
@@ -16,8 +16,18 @@ export default {
     enabled: 'On',
     disabled: 'Off',
   },
+  login: {
+    brand: 'Pika',
+    lead: 'Sign in with the same email or Telegram username you used on the website.',
+    account: 'Account',
+    accountPlaceholder: 'Email or @username',
+    password: 'Password',
+    passwordPlaceholder: 'Password',
+    submit: 'Sign in',
+  },
   nav: {
     home: 'Home',
+    account: 'Pika Account',
     subscription: 'Subscription',
     proxy: 'Proxy',
     connections: 'Connections',
@@ -41,6 +51,12 @@ export default {
     disconnected: 'Disconnected',
   },
   home: {
+    quotaTitle: 'Remaining quota',
+    quotaPlan: 'Plan',
+    quotaExpire: 'Expires',
+    quotaUsed: 'Used',
+    quotaRemaining: 'Remaining',
+    quotaUnlimited: 'Unlimited',
     kernelHealthy: 'Kernel healthy',
     kernelUnhealthy: 'Kernel has issues',
     kernelCheckedAt: 'Last checked',
@@ -93,11 +109,10 @@ export default {
     },
     proxyMode: {
       system: 'System Proxy',
-      tun: 'TUN Mode',
+      tun: 'Full Tunnel',
       manual: 'Manual Mode',
-      systemTip: 'Automatically set system proxy',
-      tunTip:
-        'Use TUN virtual network card to proxy all traffic, requires administrator privileges',
+      systemTip: 'Browser-only system proxy. Telegram and other apps will not use it.',
+      tunTip: 'Take over the default route so every app works with one click',
       manualTip: 'Requires manual configuration of system proxy',
     },
     nodeMode: {

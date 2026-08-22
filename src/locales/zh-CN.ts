@@ -1,6 +1,6 @@
 export default {
   common: {
-    appName: 'Sing-Box Windows',
+    appName: 'Pika',
     cancel: '取消',
     save: '保存',
     saveSuccess: '保存成功',
@@ -16,8 +16,18 @@ export default {
     enabled: '已开启',
     disabled: '已关闭',
   },
+  login: {
+    brand: 'Pika',
+    lead: '输入网站上的邮箱或 Telegram 用户名，登录后即可使用。',
+    account: '账号',
+    accountPlaceholder: '邮箱或 @用户名',
+    password: '密码',
+    passwordPlaceholder: '密码',
+    submit: '登录',
+  },
   nav: {
     home: '首页',
+    account: 'Pika 账号',
     subscription: '订阅',
     proxy: '代理',
     connections: '连接',
@@ -41,6 +51,12 @@ export default {
     disconnected: '已断开',
   },
   home: {
+    quotaTitle: '剩余额度',
+    quotaPlan: '套餐',
+    quotaExpire: '到期',
+    quotaUsed: '已用',
+    quotaRemaining: '剩余',
+    quotaUnlimited: '不限流量',
     kernelHealthy: '内核健康',
     kernelUnhealthy: '内核存在异常',
     kernelCheckedAt: '上次检查',
@@ -93,10 +109,10 @@ export default {
     },
     proxyMode: {
       system: '系统代理',
-      tun: 'TUN模式',
+      tun: '全局加速',
       manual: '手动模式',
-      systemTip: '自动设置系统代理',
-      tunTip: '使用TUN虚拟网卡代理所有流量，需要管理员权限',
+      systemTip: '只给浏览器设代理，Telegram 等 App 不会走',
+      tunTip: '接管系统默认路由，所有软件点一下就能用',
       manualTip: '需要手动配置系统代理',
     },
     nodeMode: {
@@ -119,7 +135,7 @@ export default {
     sudoPassword: {
       title: '需要系统密码',
       description:
-        '首次启用 TUN 需要使用 sudo 提权启动内核。密码会加密保存在本地数据库，仅用于本机提权，不会上传。',
+        '全局加速会接管电脑默认网络，Telegram、浏览器都会一起走。首次需要输入一次系统密码，保存在本机，不会上传。',
       placeholder: '请输入系统密码',
       save: '保存并继续',
       saved: '系统密码已保存',
@@ -291,7 +307,7 @@ export default {
   },
   sub: {
     title: '订阅管理',
-    subtitle: '管理您的订阅配置和代理节点',
+    subtitle: 'Pika 官方线路登录后自动下发。这里只管理自己导入的订阅，过期了可以删除。',
     total: '总计',
     active: '活跃',
     add: '添加订阅',

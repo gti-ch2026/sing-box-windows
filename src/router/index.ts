@@ -1,9 +1,16 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import Layout from '@/components/layout/MainLayout.vue'
+import { loadSession } from '@/services/pika-account-service'
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: '/login',
+      name: 'Login',
+      component: () => import('@/views/PikaLoginView.vue'),
+      meta: { public: true },
+    },
     // 空白页面 - 独立路由，用于托盘模式下减少内存占用
     {
       path: '/blank',
@@ -23,6 +30,11 @@ const router = createRouter({
           path: '/',
           name: 'Home',
           component: () => import('@/views/HomeView.vue'),
+        },
+        {
+          path: '/account',
+          name: 'Account',
+          component: () => import('@/views/PikaAccountView.vue'),
         },
         {
           path: '/sub',
@@ -59,8 +71,17 @@ const router = createRouter({
   ],
 })
 
-// 路由守卫
-router.beforeEach((to, from, next) => {
+// 未登录只能进登录页；登录后官方线路由 Pika 账号页 / 启动流程下发
+router.beforeEach((to, _from, next) => {
+  const loggedIn = Boolean(loadSession()?.token)
+  if (!loggedIn && !to.meta.public && to.name !== 'Blank') {
+    next({ name: 'Login' })
+    return
+  }
+  if (loggedIn && to.name === 'Login') {
+    next({ name: 'Home' })
+    return
+  }
   next()
 })
 
