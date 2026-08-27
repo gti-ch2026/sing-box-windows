@@ -6,7 +6,9 @@ use crate::app::core::kernel_service::{
     orchestrated_start_kernel, KernelRuntimeConfig, ProxyOverrides,
 };
 use crate::app::core::tun_profile::TunProxyOptions;
-use crate::app::storage::enhanced_storage_service::db_get_app_config;
+use crate::app::storage::enhanced_storage_service::{
+    db_get_app_config, db_save_app_config_internal,
+};
 use crate::app::storage::state_model::AppConfig;
 use serde::Serialize;
 use tauri::AppHandle;
@@ -188,13 +190,36 @@ async fn auto_manage_kernel_internal(
     }
 }
 
+/// 无人值守拉起内核时关掉 TUN。
+/// TUN 在 macOS/Linux 要 sudo 密码，开机自动开会弹框或直接失败。
+pub(crate) fn strip_tun_for_unattended_start(config: &mut AppConfig) -> bool {
+    if !config.tun_enabled {
+        return false;
+    }
+    config.tun_enabled = false;
+    config.proxy_mode = if config.system_proxy_enabled {
+        "system".to_string()
+    } else {
+        "manual".to_string()
+    };
+    true
+}
+
 pub async fn auto_manage_with_saved_config(
     app_handle: &AppHandle,
     force_restart: bool,
     reason: &str,
 ) {
     match db_get_app_config(app_handle.clone()).await {
-        Ok(config) => {
+        Ok(mut config) => {
+            if reason == "app-start" && strip_tun_for_unattended_start(&mut config) {
+                if let Err(err) = db_save_app_config_internal(config.clone(), app_handle).await {
+                    warn!("开机关闭 TUN 写入失败: {}", err);
+                } else {
+                    info!("开机不自动开启 TUN，避免索要系统密码；需要全局接管请在设置里手动打开");
+                }
+            }
+
             let mut options = AutoManageOptions::from_app_config(config);
             options.config.force_restart = force_restart;
 
@@ -323,4 +348,35 @@ pub async fn kernel_auto_manage(
         _ => {}
     }
     serde_json::to_value(result).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_tun_keeps_system_proxy_as_default_mode() {
+        let mut config = AppConfig::default();
+        config.tun_enabled = true;
+        config.system_proxy_enabled = true;
+        config.proxy_mode = "tun".to_string();
+
+        assert!(strip_tun_for_unattended_start(&mut config));
+        assert!(!config.tun_enabled);
+        assert!(config.system_proxy_enabled);
+        assert_eq!(config.proxy_mode, "system");
+        assert!(!strip_tun_for_unattended_start(&mut config));
+    }
+
+    #[test]
+    fn strip_tun_falls_back_to_manual_when_system_proxy_off() {
+        let mut config = AppConfig::default();
+        config.tun_enabled = true;
+        config.system_proxy_enabled = false;
+        config.proxy_mode = "tun".to_string();
+
+        assert!(strip_tun_for_unattended_start(&mut config));
+        assert!(!config.tun_enabled);
+        assert_eq!(config.proxy_mode, "manual");
+    }
 }

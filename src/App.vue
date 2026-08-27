@@ -221,7 +221,7 @@ onMounted(async () => {
         const code = parseSudoCode(payload)
         if (!code) return
 
-        // 仅在 TUN 开启时处理（避免手动模式下误触发）
+        // 仅用户主动打开 TUN 时才要系统密码。开机默认系统代理，不弹框。
         if (!appStore.tunEnabled) return
 
         try {
