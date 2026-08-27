@@ -20,6 +20,29 @@ export function controlPlaneBase(): string {
   return DEFAULT_CONTROL_PLANE
 }
 
+export function rewriteStaleSubscribeUrl(url: string, currentToken?: string): string {
+  try {
+    const parsed = new URL(url)
+    const local = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
+    const ngrok = parsed.hostname.endsWith('.ngrok-free.app') || parsed.hostname.endsWith('.ngrok.io')
+    if (!parsed.pathname.startsWith('/s/')) {
+      return url
+    }
+    if (currentToken && parsed.pathname !== `/s/${currentToken}`) {
+      return `${controlPlaneBase()}/s/${currentToken}`
+    }
+    if (ngrok) {
+      return `${controlPlaneBase()}${parsed.pathname}`
+    }
+    if (local) {
+      return url
+    }
+    return url
+  } catch {
+    return url
+  }
+}
+
 function deviceId(): string {
   const existing = localStorage.getItem(DEVICE_KEY)?.trim()
   if (existing) return existing
@@ -142,4 +165,25 @@ export async function refreshPikaSession(token: string, fallbackId = ''): Promis
   const session = parseSession({ data: { auth_data: token } }, subBody, fallbackId)
   saveSession(session)
   return session
+}
+
+export async function reportPikaTraffic(
+  token: string,
+  upload: number,
+  download: number,
+): Promise<{ u: number; d: number; transfer_enable: number }> {
+  const body = await postJson(
+    '/api/v1/user/traffic/report',
+    {
+      upload: Math.max(0, Math.floor(upload)),
+      download: Math.max(0, Math.floor(download)),
+    },
+    token,
+  )
+  const data = (body.data || body) as Record<string, unknown>
+  return {
+    u: Number(data.u || 0),
+    d: Number(data.d || 0),
+    transfer_enable: Number(data.transfer_enable || 0),
+  }
 }

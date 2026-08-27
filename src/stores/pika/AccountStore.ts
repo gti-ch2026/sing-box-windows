@@ -5,8 +5,11 @@ import {
   loadSession,
   loginPika,
   refreshPikaSession,
+  rewriteStaleSubscribeUrl,
+  saveSession,
   type PikaSession,
 } from '@/services/pika-account-service'
+import { startPikaTrafficReporter, stopPikaTrafficReporter } from '@/services/pika-traffic-reporter'
 import { subscriptionService } from '@/services/subscription-service'
 import { generateConfigFileName } from '@/views/sub/subscription-utils'
 import { useSubStore } from '@/stores/subscription/SubStore'
@@ -39,18 +42,37 @@ export const usePikaAccountStore = defineStore('pika-account', () => {
     return Math.max(session.value.totalBytes - usedBytes.value, 0)
   })
 
+  const applyQuota = (quota: { u?: number; d?: number; transfer_enable?: number }) => {
+    if (!session.value) return
+    session.value = {
+      ...session.value,
+      uploadBytes: Number(quota.u ?? session.value.uploadBytes),
+      downloadBytes: Number(quota.d ?? session.value.downloadBytes),
+      totalBytes: Number(quota.transfer_enable ?? session.value.totalBytes),
+    }
+    saveSession(session.value)
+  }
+
   const hydrate = () => {
     session.value = loadSession()
+    if (session.value) startPikaTrafficReporter()
   }
 
   const applyOfficialSubscription = async (next: PikaSession) => {
     const subStore = useSubStore()
     const appStore = useAppStore()
     const kernelStore = useKernelStore()
+    const token = next.subscribeUrl.split('/s/')[1] || ''
+    next.subscribeUrl = rewriteStaleSubscribeUrl(next.subscribeUrl, token)
     const result = await subscriptionService.downloadSubscription(next.subscribeUrl, false, {
       fileName: generateConfigFileName('pika-official'),
       applyRuntime: false,
     })
+    for (const item of subStore.list) {
+      if (item.name === OFFICIAL_NAME) {
+        item.url = next.subscribeUrl
+      }
+    }
     const existing = subStore.list.findIndex((item) => item.name === OFFICIAL_NAME)
     const item = {
       name: OFFICIAL_NAME,
@@ -76,6 +98,7 @@ export const usePikaAccountStore = defineStore('pika-account', () => {
     }
     await subscriptionService.setActiveConfig(result.configPath, { useOriginalConfig: false })
     await appStore.setActiveConfigPath(result.configPath)
+    await appStore.toggleTun(false)
     await appStore.toggleSystemProxy(true)
     await kernelStore.applyProxySettings()
     await kernelStore.restartKernel()
@@ -87,6 +110,7 @@ export const usePikaAccountStore = defineStore('pika-account', () => {
     try {
       const next = await loginPika(identifier, password)
       session.value = next
+      startPikaTrafficReporter()
       try {
         await applyOfficialSubscription(next)
       } catch (err) {
@@ -112,11 +136,13 @@ export const usePikaAccountStore = defineStore('pika-account', () => {
     const appStore = useAppStore()
     try {
       await kernelStore.stopKernel()
+      await appStore.toggleTun(false)
       await appStore.toggleSystemProxy(false)
       await kernelStore.applyProxySettings()
     } catch {
       /* 退出时内核可能本来就没在跑 */
     }
+    stopPikaTrafficReporter()
     clearSession()
     session.value = null
   }
@@ -130,6 +156,7 @@ export const usePikaAccountStore = defineStore('pika-account', () => {
     usedBytes,
     remainingBytes,
     hydrate,
+    applyQuota,
     login,
     refresh,
     logout,
