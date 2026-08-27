@@ -95,6 +95,127 @@ pub fn ensure_kernel_log_output(config_obj: &mut Map<String, Value>) {
     log_obj.insert("output".to_string(), json!(kernel_log_output_path()));
 }
 
+/// urltest 测速间隔。30s 扫一遍 100+ 节点会把空闲带宽打满，体感就是网页一顿一顿。
+pub const URLTEST_INTERVAL: &str = "5m";
+/// 切换容差（毫秒）。香港家宽彼此只差几十毫秒，过小会来回切。
+pub const URLTEST_TOLERANCE: u64 = 400;
+/// 空闲超过此时长停止测速，避免后台一直打测速包。
+pub const URLTEST_IDLE_TIMEOUT: &str = "30m";
+/// 自动组最多探测这么多条。全量探测又慢又抖。
+pub const URLTEST_MAX_CANDIDATES: usize = 8;
+
+/// 订阅里常见的「提示/官网/流量」占位节点，放进 urltest 会变成启动即死路。
+const PLACEHOLDER_MARKERS: &[&str] = &[
+    "官网",
+    "流量",
+    "过期",
+    "到期",
+    "剩余",
+    "到期时间",
+    "yuntijiasu",
+    "yunti.io",
+];
+
+pub fn is_placeholder_node_tag(tag: &str) -> bool {
+    PLACEHOLDER_MARKERS.iter().any(|marker| tag.contains(marker))
+}
+
+fn is_hong_kong(tag: &str) -> bool {
+    let upper = tag.to_ascii_uppercase();
+    tag.contains("香港") || tag.contains("🇭🇰") || upper.contains("HK")
+}
+
+fn is_residential(tag: &str) -> bool {
+    tag.contains("家宽") || tag.contains("住宅") || tag.contains("IEPL") || tag.contains("IPLC")
+}
+
+/// 越小越优先进入自动组。
+/// 实测：香港家宽吞吐 90–120Mbps，轻量节点延迟低但只有 20Mbps。
+fn quality_rank(tag: &str) -> u8 {
+    match (is_hong_kong(tag), is_residential(tag)) {
+        (true, true) => 0,
+        (true, false) => 1,
+        (false, true) => 2,
+        (false, false) => 3,
+    }
+}
+
+fn is_reserved_outbound_tag(tag: &str) -> bool {
+    matches!(
+        tag,
+        TAG_DIRECT | TAG_AUTO | TAG_MANUAL | TAG_BLOCK | TAG_TELEGRAM | TAG_YOUTUBE | TAG_NETFLIX
+            | TAG_OPENAI | TAG_GOOGLE
+    )
+}
+
+/// 从订阅节点里挑自动选优候选：丢掉占位节点，香港家宽优先，控制探测规模。
+pub fn select_urltest_candidates(tags: &[String]) -> Vec<String> {
+    let mut usable: Vec<&String> = tags
+        .iter()
+        .filter(|tag| !is_reserved_outbound_tag(tag) && !is_placeholder_node_tag(tag))
+        .collect();
+
+    usable.sort_by(|a, b| {
+        quality_rank(a)
+            .cmp(&quality_rank(b))
+            .then_with(|| a.cmp(b))
+    });
+
+    // 有香港就只跑香港：远端延迟高，塞进自动组会把测速和切换一起拖慢。
+    if usable.iter().any(|tag| is_hong_kong(tag)) {
+        usable.retain(|tag| is_hong_kong(tag));
+    }
+
+    let picked: Vec<String> = usable
+        .into_iter()
+        .take(URLTEST_MAX_CANDIDATES)
+        .cloned()
+        .collect();
+
+    if picked.is_empty() {
+        vec![TAG_DIRECT.to_string()]
+    } else {
+        picked
+    }
+}
+
+pub fn urltest_outbound_template(url: &str, outbounds: Vec<Value>) -> Value {
+    json!({
+        "type": "urltest",
+        "tag": TAG_AUTO,
+        "outbounds": outbounds,
+        // 容差拉大后很少切节点；切的时候不断旧连接，避免网页/视频被集体掐断。
+        "interrupt_exist_connections": false,
+        "idle_timeout": URLTEST_IDLE_TIMEOUT,
+        "interval": URLTEST_INTERVAL,
+        "tolerance": URLTEST_TOLERANCE,
+        "url": url,
+    })
+}
+
+pub fn apply_urltest_stability_settings(obj: &mut Map<String, Value>, url: &str) {
+    obj.insert("interrupt_exist_connections".to_string(), json!(false));
+    obj.insert("idle_timeout".to_string(), json!(URLTEST_IDLE_TIMEOUT));
+    obj.insert("interval".to_string(), json!(URLTEST_INTERVAL));
+    obj.insert("tolerance".to_string(), json!(URLTEST_TOLERANCE));
+    if !url.is_empty() {
+        obj.insert("url".to_string(), json!(url));
+    }
+    if let Some(members) = obj.get("outbounds").and_then(|value| value.as_array()) {
+        let tags: Vec<String> = members
+            .iter()
+            .filter_map(|value| value.as_str().map(str::to_string))
+            .collect();
+        if !tags.is_empty() {
+            let selected = select_urltest_candidates(&tags);
+            obj.insert(
+                "outbounds".to_string(),
+                Value::Array(selected.into_iter().map(Value::String).collect()),
+            );
+        }
+    }
+}
+
 pub fn normalize_default_outbound(app_config: &AppConfig) -> &'static str {
     match app_config.singbox_default_proxy_outbound.as_str() {
         "auto" => TAG_AUTO,

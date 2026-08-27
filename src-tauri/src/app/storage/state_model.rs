@@ -93,7 +93,7 @@ impl Default for AppConfig {
             singbox_dns_cn: "h3://dns.alidns.com/dns-query".to_string(),
             singbox_dns_resolver: "114.114.114.114".to_string(),
             singbox_urltest_url: "http://cp.cloudflare.com/generate_204".to_string(),
-            singbox_default_proxy_outbound: "manual".to_string(),
+            singbox_default_proxy_outbound: "auto".to_string(),
             singbox_block_ads: true,
             // gh-proxy 已经做加速，默认走直连下载，避免额外经过代理
             singbox_download_detour: "direct".to_string(),

@@ -296,3 +296,76 @@ fn generated_tun_inbound_should_use_explicit_route_exclude_address_override() {
         Some(&serde_json::json!(["203.0.113.0/24"]))
     );
 }
+
+fn dummy_node(tag: &str, server: &str) -> Value {
+    serde_json::json!({
+        "type": "vmess",
+        "tag": tag,
+        "server": server,
+        "server_port": 443,
+        "uuid": "00000000-0000-0000-0000-000000000000",
+        "security": "auto",
+        "alter_id": 0
+    })
+}
+
+#[test]
+fn inject_nodes_should_limit_urltest_to_nearby_candidates() {
+    let nodes: Vec<Value> = vec![
+        dummy_node("🇩🇪 德国-DE02【优化】", "de.example.com"),
+        dummy_node("🇺🇸 美国-US01【优化】", "us.example.com"),
+        dummy_node("🇭🇰 PRO-A-香港-HK03|v202605", "hk3.example.com"),
+        dummy_node("🇭🇰 PRO-A-香港-HK07-家宽|v202605", "hk7.example.com"),
+        dummy_node("🇭🇰 PRO-A-香港-HK09-家宽|v202605", "hk9.example.com"),
+        dummy_node("🇭🇰 PRO-A-香港-HK10-家宽|v202605", "hk10.example.com"),
+        dummy_node("🇭🇰 旗舰-香港-HK05-家宽|v202605", "hk5.example.com"),
+        dummy_node("PRO-B-官网yuntijiasu.com|v202605", "0.0.0.0"),
+        dummy_node("🇹🇼 PRO-B-台湾-TW01|v202605", "tw.example.com"),
+        dummy_node("🇯🇵 PRO-C-日本-JP01|v202605", "jp.example.com"),
+        dummy_node("🇸🇬 PRO-F-新加坡-SG01|v202605", "sg.example.com"),
+    ];
+
+    let config = generate_config_with_nodes(&AppConfig::default(), &nodes).expect("生成配置");
+    let auto = config
+        .get("outbounds")
+        .and_then(|v| v.as_array())
+        .and_then(|list| {
+            list.iter()
+                .find(|item| item.get("tag").and_then(|t| t.as_str()) == Some(TAG_AUTO))
+        })
+        .expect("自动选择组应存在");
+
+    assert_eq!(auto.get("type").and_then(|v| v.as_str()), Some("urltest"));
+    assert_eq!(auto.get("interval").and_then(|v| v.as_str()), Some("5m"));
+    assert_eq!(auto.get("tolerance").and_then(|v| v.as_u64()), Some(400));
+    assert_eq!(
+        auto.get("interrupt_exist_connections").and_then(|v| v.as_bool()),
+        Some(false)
+    );
+
+    let members: Vec<&str> = auto
+        .get("outbounds")
+        .and_then(|v| v.as_array())
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert!(members.len() <= 8);
+    assert!(members.iter().any(|tag| tag.contains("香港")));
+    assert!(!members.iter().any(|tag| tag.contains("官网")));
+    assert!(!members.iter().any(|tag| *tag == "direct"));
+
+    let manual = config
+        .get("outbounds")
+        .and_then(|v| v.as_array())
+        .and_then(|list| {
+            list.iter()
+                .find(|item| item.get("tag").and_then(|t| t.as_str()) == Some(TAG_MANUAL))
+        })
+        .expect("手动切换组应存在");
+    let manual_members = manual
+        .get("outbounds")
+        .and_then(|v| v.as_array())
+        .unwrap();
+    assert!(manual_members.len() > members.len());
+}
