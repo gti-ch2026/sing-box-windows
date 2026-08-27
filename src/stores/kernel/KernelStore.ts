@@ -172,17 +172,20 @@ export const useKernelStore = defineStore('kernel', () => {
   }
 
   const stopKernel = async (options?: { force?: boolean }) => {
+    if (isLoading.value) return false
+    isLoading.value = true
     try {
       const result = await kernelService.stopKernel({ force: options?.force ?? false })
       if (!result.success) {
         lastError.value = result.message
         return false
       }
-      // await refreshStatus() // 移除主动刷新，依赖事件推送
       return true
     } catch (error) {
       lastError.value = error instanceof Error ? error.message : '内核停止失败'
       return false
+    } finally {
+      isLoading.value = false
     }
   }
 

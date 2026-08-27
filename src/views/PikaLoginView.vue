@@ -1,27 +1,42 @@
 <template>
   <div class="login-shell">
-    <div class="login-card">
+    <form class="login-card" autocomplete="on" @submit.prevent="onSubmit">
       <h1>{{ t('login.brand') }}</h1>
       <p class="lead">{{ t('login.lead') }}</p>
-      <n-form @submit.prevent="onSubmit">
-        <n-form-item :label="t('login.account')">
-          <n-input v-model:value="email" :placeholder="t('login.accountPlaceholder')" @keyup.enter="onSubmit" />
-        </n-form-item>
-        <n-form-item :label="t('login.password')">
-          <n-input
-            v-model:value="password"
-            type="password"
-            show-password-on="click"
-            :placeholder="t('login.passwordPlaceholder')"
-            @keyup.enter="onSubmit"
-          />
-        </n-form-item>
-        <n-button type="primary" block :loading="account.loading" @click="onSubmit">
-          {{ t('login.submit') }}
-        </n-button>
-        <p v-if="account.error" class="err">{{ account.error }}</p>
-      </n-form>
-    </div>
+
+      <label class="field" for="pika-login-username">
+        <span>{{ t('login.account') }}</span>
+        <input
+          id="pika-login-username"
+          v-model="email"
+          name="username"
+          type="text"
+          inputmode="email"
+          autocomplete="username"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          :placeholder="t('login.accountPlaceholder')"
+        />
+      </label>
+
+      <label class="field" for="pika-login-password">
+        <span>{{ t('login.password') }}</span>
+        <input
+          id="pika-login-password"
+          v-model="password"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          :placeholder="t('login.passwordPlaceholder')"
+        />
+      </label>
+
+      <n-button type="primary" block attr-type="submit" :loading="account.loading">
+        {{ t('login.submit') }}
+      </n-button>
+      <p v-if="account.error" class="err">{{ account.error }}</p>
+    </form>
   </div>
 </template>
 
@@ -78,24 +93,43 @@ h1 {
   font-size: 15px;
   line-height: 1.6;
 }
+.field {
+  display: block;
+  margin: 0 0 16px;
+}
+.field span {
+  display: block;
+  margin-bottom: 6px;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 600;
+}
+.field input {
+  display: block;
+  width: 100%;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 10px;
+  background: #fff;
+  color: #111827;
+  -webkit-text-fill-color: #111827;
+  caret-color: #111827;
+  font-size: 15px;
+  outline: none;
+}
+.field input::placeholder {
+  color: #64748b;
+  -webkit-text-fill-color: #64748b;
+}
+.field input:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
 .err {
   margin-top: 12px;
   color: #b42318;
-}
-:deep(.n-form-item-label) {
-  color: #1f2937 !important;
-  font-weight: 600;
-}
-:deep(.n-input .n-input__input-el),
-:deep(.n-input input),
-:deep(.n-input .n-input-wrapper) {
-  color: #111827 !important;
-  -webkit-text-fill-color: #111827 !important;
-  caret-color: #111827;
-}
-:deep(.n-input .n-input__placeholder),
-:deep(.n-input .n-input__placeholder span) {
-  color: #475569 !important;
 }
 :deep(.n-button),
 :deep(.n-button .n-button__content) {

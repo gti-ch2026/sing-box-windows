@@ -1,6 +1,6 @@
 <template>
   <div class="page-shell home-page">
-    <!-- Hero 状态卡（精简：状态 + 重启，不再重复速度与统计） -->
+    <!-- Hero 状态卡：开/关代理，运行中才显示重启 -->
     <section class="hero-card" :class="statusClass">
       <div class="hero-glow"></div>
       <div class="hero-inner">
@@ -16,11 +16,19 @@
             <n-button
               :type="kernelRunning ? 'error' : 'primary'"
               :loading="kernelLoading"
-              @click="restartKernel"
+              @click="toggleProxyPower"
             >
               <template #icon>
                 <n-icon><PowerOutline /></n-icon>
               </template>
+              {{ kernelRunning ? t('home.stop') : t('home.start') }}
+            </n-button>
+            <n-button
+              v-if="kernelRunning"
+              secondary
+              :loading="kernelLoading"
+              @click="restartKernel"
+            >
               {{ t('home.restart') }}
             </n-button>
             <n-tooltip v-if="isWindowsPlatform && !isAdmin" trigger="hover">
@@ -102,20 +110,6 @@
           {{ systemProxyEnabled ? t('common.enabled') : t('common.disabled') }}
         </span>
       </button>
-      <button
-        class="quick-btn"
-        :class="{ on: tunProxyEnabled }"
-        :disabled="modeSwitchPending"
-        @click="toggleTunProxy(!tunProxyEnabled)"
-      >
-        <div class="quick-icon" :class="tunProxyEnabled ? 'green' : 'gray'">
-          <n-icon :size="20"><FlashOutline /></n-icon>
-        </div>
-        <span class="quick-label">{{ t('home.proxyMode.tun') }}</span>
-        <span class="quick-state" :class="tunProxyEnabled ? 'on' : 'off'">
-          {{ tunProxyEnabled ? t('common.enabled') : t('common.disabled') }}
-        </span>
-      </button>
       <button class="quick-btn" @click="cycleNodeProxyMode">
         <div class="quick-icon blue">
           <n-icon :size="20"><RadioOutline /></n-icon>
@@ -144,8 +138,10 @@
       <SectionCard class="info-panel">
         <div class="info-grid">
           <div class="info-item">
-            <span class="info-label">{{ t('home.quick.proxyAddr') }}</span>
-            <code class="info-value">{{ proxyAddress }}</code>
+            <span class="info-label">{{ t('home.wsStatus.connected') }}</span>
+            <code class="info-value">{{
+              kernelRunning ? t('status.running') : t('status.stopped')
+            }}</code>
           </div>
           <div class="info-item">
             <span class="info-label">{{ t('nav.connections') }}</span>
@@ -168,11 +164,6 @@
     <!-- 代理模式详细开关区 -->
     <div class="bottom-grid">
       <SectionCard>
-        <template #actions>
-          <n-button size="tiny" quaternary @click="showPortModal = true">
-            {{ t('common.edit') }}
-          </n-button>
-        </template>
         <div class="toggle-list">
           <div class="toggle-item" :class="{ active: systemProxyEnabled }">
             <div class="toggle-icon">
@@ -180,7 +171,7 @@
             </div>
             <div class="toggle-info">
               <span class="toggle-name">{{ t('home.proxyMode.system') }}</span>
-              <code class="toggle-port">{{ proxyAddress }}</code>
+              <span class="toggle-desc">{{ t('home.proxyMode.systemTip') }}</span>
             </div>
             <n-switch
               :value="systemProxyEnabled"
@@ -206,27 +197,8 @@
           </div>
         </div>
       </SectionCard>
-
-      <SectionCard>
-        <div class="mode-chips-wrap">
-          <div class="mode-chips-title">{{ t('home.proxyHeader.nodeMode') }}</div>
-          <div class="mode-chips">
-            <div
-              v-for="mode in nodeProxyModes"
-              :key="mode.value"
-              class="mode-chip"
-              :class="{ active: currentNodeProxyMode === mode.value }"
-              @click="handleNodeProxyModeChange(mode.value)"
-            >
-              <n-icon :size="15"><component :is="mode.icon" /></n-icon>
-              <span>{{ t(mode.nameKey) }}</span>
-            </div>
-          </div>
-        </div>
-      </SectionCard>
     </div>
 
-    <PortSettingsDialog v-model:show="showPortModal" />
   </div>
 </template>
 
@@ -252,7 +224,6 @@ import { kernelService } from '@/services/kernel-service'
 import { proxyService } from '@/services/proxy-service'
 import { sudoService } from '@/services/sudo-service'
 import { systemService } from '@/services/system-service'
-import PortSettingsDialog from '@/components/common/PortSettingsDialog.vue'
 import TrafficChart from '@/components/layout/TrafficChart.vue'
 import SectionCard from '@/components/common/SectionCard.vue'
 import { useKernelStatus } from '@/composables/useKernelStatus'
@@ -285,7 +256,6 @@ const isAdmin = ref(false)
 const platform = ref<'windows' | 'linux' | 'macos' | 'unknown'>('unknown')
 const currentNodeProxyMode = ref('rule')
 const modeSwitchPending = ref(false)
-const showPortModal = ref(false)
 const quickTesting = ref(false)
 
 const isWindowsPlatform = computed(() => platform.value === 'windows')
@@ -345,7 +315,6 @@ const quotaRemainingText = computed(() => {
 
 const systemProxyEnabled = computed(() => appStore.systemProxyEnabled)
 const tunProxyEnabled = computed(() => appStore.tunEnabled)
-const proxyAddress = computed(() => `127.0.0.1:${appStore.proxyPort}`)
 
 const nodeProxyModes = [
   {
@@ -599,6 +568,44 @@ const toggleTunProxy = async (value: boolean) => {
   }
 }
 
+const toggleProxyPower = async () => {
+  if (kernelLoading.value) return
+
+  if (kernelRunning.value) {
+    try {
+      await appStore.toggleTun(false)
+      await appStore.toggleSystemProxy(false)
+      await kernelStore.applyProxySettings({
+        system_proxy_enabled: false,
+        tun_enabled: false,
+      })
+      const stopped = await kernelStore.stopKernel()
+      if (stopped) {
+        message.success(t('home.stopSuccess'))
+      } else {
+        message.error(getKernelFailureText(t('home.stopFailed')))
+      }
+    } catch {
+      message.error(t('home.stopFailed'))
+    }
+    return
+  }
+
+  try {
+    await appStore.toggleTun(false)
+    await appStore.toggleSystemProxy(true)
+    await kernelStore.applyProxySettings()
+    const started = await kernelStore.restartKernel()
+    if (started) {
+      message.success(t('home.startSuccess'))
+    } else {
+      message.error(getKernelFailureText(t('home.startFailed')))
+    }
+  } catch {
+    message.error(t('home.startFailed'))
+  }
+}
+
 const restartKernel = async () => {
   if (kernelLoading.value) return
 
@@ -684,11 +691,7 @@ onMounted(async () => {
   await kernelStore.initializeStore()
   await proxyStore.fetchProxies().catch(() => undefined)
   await syncCurrentNodeProxyMode()
-  // 客户要的是点一下全机都能用。系统 HTTP 代理管不了 Telegram，
-  // 内核跑着就自动切到 TUN，接管默认路由。
-  if (kernelRunning.value && !tunProxyEnabled.value) {
-    void toggleTunProxy(true)
-  }
+  // 客户主路径是系统代理：开机和进首页都不要自动开 TUN，避免弹系统密码。
 })
 </script>
 

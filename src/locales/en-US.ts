@@ -61,8 +61,12 @@ export default {
     kernelUnhealthy: 'Kernel has issues',
     kernelCheckedAt: 'Last checked',
     noIssues: 'No issues',
-    start: 'Start',
-    stop: 'Stop',
+    start: 'Turn on',
+    stop: 'Turn off',
+    startSuccess: 'Proxy is on',
+    stopSuccess: 'Proxy is off',
+    startFailed: 'Failed to turn on',
+    stopFailed: 'Failed to turn off',
     restart: 'Restart',
     restartAsAdmin: 'Restart as Admin',
     restartFailed: 'Restart failed',
@@ -87,7 +91,7 @@ export default {
       desc: 'Use these addresses in browser extensions or other clients. HTTP and SOCKS5 share the same mixed inbound port.',
     },
     statusDescriptions: {
-      runningDesc: 'Kernel is running, proxy service available',
+      runningDesc: 'On. Browsers use system proxy; open Full tunnel below for apps like Telegram',
       disconnectedDesc: 'Kernel started but connection abnormal, please check configuration',
     },
     kernelStatusDescriptions: {
@@ -109,10 +113,10 @@ export default {
     },
     proxyMode: {
       system: 'System Proxy',
-      tun: 'Full Tunnel',
+      tun: 'Full tunnel (advanced)',
       manual: 'Manual Mode',
-      systemTip: 'Browser-only system proxy. Telegram and other apps will not use it.',
-      tunTip: 'Take over the default route so every app works with one click',
+      systemTip: 'Browsers and most apps work immediately. No admin password.',
+      tunTip: 'Routes every app, including Telegram. Asks for your computer password once; it will not turn on automatically next launch.',
       manualTip: 'Requires manual configuration of system proxy',
     },
     nodeMode: {
@@ -136,7 +140,7 @@ export default {
     sudoPassword: {
       title: 'System password required',
       description:
-        'Enabling TUN for the first time requires sudo privileges to start the kernel. The password will be encrypted and stored locally for sudo use only, and will never be uploaded.',
+        'Full tunnel changes the default route so Telegram also goes through Pika. Your computer password is asked only when you turn it on, stored locally, never uploaded, and it will not auto-enable on next launch.',
       placeholder: 'Enter your system password',
       save: 'Save & continue',
       saved: 'System password saved',
