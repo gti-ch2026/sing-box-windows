@@ -21,7 +21,7 @@ export default {
     brand: 'Pika',
     lead: 'Войдите тем же email или Telegram-именем, что и на сайте.',
     account: 'Аккаунт',
-    accountPlaceholder: 'Email или @username',
+    accountPlaceholder: 'Email или имя Telegram',
     password: 'Пароль',
     passwordPlaceholder: 'Пароль',
     submit: 'Войти',

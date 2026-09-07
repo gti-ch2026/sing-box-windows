@@ -89,17 +89,14 @@ export function useAppBootstrap(deps: AppBootstrapDeps) {
       ])
       windowStore.windowState.isVisible = visible
 
+      const { loadSession } = await import('@/services/pika-account-service')
+      const loggedIn = Boolean(loadSession()?.token)
+      const path = router.currentRoute.value.path
+      if (path === '/blank') {
+        await router.replace(loggedIn ? '/' : '/login')
+      }
       if (!visible || minimized) {
-        if (router.currentRoute.value.path !== '/blank') {
-          windowStore.windowState.lastVisiblePath = router.currentRoute.value.path
-          await router.push('/blank')
-        }
-      } else if (
-        visible &&
-        router.currentRoute.value.path === '/blank' &&
-        windowStore.windowState.lastVisiblePath
-      ) {
-        await router.push(windowStore.windowState.lastVisiblePath)
+        return
       }
     } catch (error) {
       console.error('检查初始窗口状态失败:', error)
@@ -188,7 +185,9 @@ export function useAppBootstrap(deps: AppBootstrapDeps) {
       const account = usePikaAccountStore()
       account.hydrate()
       if (account.loggedIn) {
-        await account.refresh()
+        void account.refresh().catch((refreshError) => {
+          console.warn('刷新 Pika 官方线路失败:', refreshError)
+        })
       }
     } catch (error) {
       console.warn('刷新 Pika 官方线路失败:', error)
@@ -197,11 +196,6 @@ export function useAppBootstrap(deps: AppBootstrapDeps) {
     // 再回退到订阅 Store 的高亮项，避免出现“高亮与内核配置不一致”。
     const activeSub = subStore.getActiveSubscription()
     const desiredConfigPath = appStore.activeConfigPath || activeSub?.configPath || null
-    if (desiredConfigPath) {
-      await subscriptionService.setActiveConfig(desiredConfigPath, {
-        useOriginalConfig: activeSub?.useOriginalConfig,
-      })
-    }
 
     await localeStore.initializeStore()
     await updateStore.initializeStore()
@@ -212,15 +206,27 @@ export function useAppBootstrap(deps: AppBootstrapDeps) {
 
     await checkInitialWindowState()
 
-    await kernelStore.initializeStore()
-    await logStore.initializeStore()
-    cleanupFns.push(() => logStore.cleanupListeners())
-
-    await Promise.allSettled([trafficStore.initializeStore(), connectionStore.initializeStore()])
-
-    await trayStore.initTray()
-
-    setupBackendEventBridge()
+    // 内核/托盘放到后面：卡住也不挡登录页和首页先画出来。
+    void (async () => {
+      try {
+        if (desiredConfigPath) {
+          await subscriptionService.setActiveConfig(desiredConfigPath, {
+            useOriginalConfig: activeSub?.useOriginalConfig,
+          })
+        }
+        await kernelStore.initializeStore()
+        await logStore.initializeStore()
+        cleanupFns.push(() => logStore.cleanupListeners())
+        await Promise.allSettled([
+          trafficStore.initializeStore(),
+          connectionStore.initializeStore(),
+        ])
+        await trayStore.initTray()
+        setupBackendEventBridge()
+      } catch (error) {
+        console.error('后台初始化失败:', error)
+      }
+    })()
   }
 
   const cleanup = () => {

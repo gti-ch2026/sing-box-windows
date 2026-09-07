@@ -20,7 +20,7 @@ export default {
     brand: 'Pika',
     lead: '输入网站上的邮箱或 Telegram 用户名，登录后即可使用。',
     account: '账号',
-    accountPlaceholder: '邮箱或 @用户名',
+    accountPlaceholder: '邮箱或 Telegram 用户名',
     password: '密码',
     passwordPlaceholder: '密码',
     submit: '登录',

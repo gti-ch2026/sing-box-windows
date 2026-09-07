@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' asset: data: blob:; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost http://127.0.0.1:* https://127.0.0.1:* ws://127.0.0.1:* http://localhost:* https://*.trycloudflare.com https://*.ngrok-free.app https://*.ngrok.io https://pika.ktyun.cc https://login.ktyun.cc; img-src 'self' asset: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; font-src 'self' data:;"
+      "csp": "default-src 'self' asset: data: blob: http://localhost:* http://127.0.0.1:*; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost http://127.0.0.1:* https://127.0.0.1:* ws://127.0.0.1:* ws://localhost:* http://localhost:* https://*.trycloudflare.com https://*.ngrok-free.app https://*.ngrok.io https://pika.ktyun.cc https://login.ktyun.cc; img-src 'self' asset: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; font-src 'self' data:;"
     }
   },
   "bundle": {

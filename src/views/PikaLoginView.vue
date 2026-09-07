@@ -67,7 +67,11 @@ const onSubmit = async () => {
 
 <style scoped>
 .login-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
   min-height: 100vh;
+  width: 100%;
   display: grid;
   place-items: center;
   background: #eef2f7;

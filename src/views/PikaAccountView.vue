@@ -12,13 +12,14 @@
       </p>
       <n-space style="margin-top: 16px">
         <n-button type="primary" :loading="account.loading" @click="onRefresh">刷新官方线路</n-button>
-        <n-button @click="onLogout">退出登录</n-button>
+        <n-button :loading="loggingOut" @click="onLogout">退出登录</n-button>
       </n-space>
     </n-card>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import PageHeader from '@/components/common/PageHeader.vue'
@@ -30,6 +31,7 @@ const { t } = useI18n()
 const router = useRouter()
 const message = useMessage()
 const account = usePikaAccountStore()
+const loggingOut = ref(false)
 
 const onRefresh = async () => {
   try {
@@ -41,8 +43,14 @@ const onRefresh = async () => {
 }
 
 const onLogout = async () => {
-  await account.logout()
-  await router.replace('/login')
+  if (loggingOut.value) return
+  loggingOut.value = true
+  try {
+    await account.logout()
+    await router.replace('/login')
+  } finally {
+    loggingOut.value = false
+  }
 }
 </script>
 

@@ -131,20 +131,48 @@ export const usePikaAccountStore = defineStore('pika-account', () => {
     await applyOfficialSubscription(next)
   }
 
-  const logout = async () => {
+  const withTimeout = async <T>(task: Promise<T>, ms: number): Promise<T | null> => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        task,
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), ms)
+        }),
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  const stopProxyInBackground = () => {
     const kernelStore = useKernelStore()
     const appStore = useAppStore()
-    try {
-      await kernelStore.stopKernel()
-      await appStore.toggleTun(false)
-      await appStore.toggleSystemProxy(false)
-      await kernelStore.applyProxySettings()
-    } catch {
-      /* 退出时内核可能本来就没在跑 */
-    }
+    void (async () => {
+      try {
+        await withTimeout(kernelStore.stopKernel({ force: true }), 2500)
+        await withTimeout(appStore.toggleTun(false), 1500)
+        await withTimeout(appStore.toggleSystemProxy(false), 1500)
+        await withTimeout(
+          kernelStore.applyProxySettings({
+            system_proxy_enabled: false,
+            tun_enabled: false,
+          }),
+          1500,
+        )
+      } catch (error) {
+        console.warn('退出登录后关闭代理失败:', error)
+      }
+    })()
+  }
+
+  const logout = async () => {
     stopPikaTrafficReporter()
     clearSession()
     session.value = null
+    error.value = ''
+    loading.value = false
+    stopProxyInBackground()
   }
 
   return {

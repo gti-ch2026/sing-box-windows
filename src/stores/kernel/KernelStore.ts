@@ -172,7 +172,7 @@ export const useKernelStore = defineStore('kernel', () => {
   }
 
   const stopKernel = async (options?: { force?: boolean }) => {
-    if (isLoading.value) return false
+    if (isLoading.value && !options?.force) return false
     isLoading.value = true
     try {
       const result = await kernelService.stopKernel({ force: options?.force ?? false })

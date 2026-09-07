@@ -21,7 +21,7 @@ export default {
     brand: 'Pika',
     lead: 'ウェブサイトと同じメールまたは Telegram ユーザー名でログインしてください。',
     account: 'アカウント',
-    accountPlaceholder: 'メールまたは @ユーザー名',
+    accountPlaceholder: 'メールまたは Telegram ユーザー名',
     password: 'パスワード',
     passwordPlaceholder: 'パスワード',
     submit: 'ログイン',

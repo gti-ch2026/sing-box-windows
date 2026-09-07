@@ -20,7 +20,7 @@ export default {
     brand: 'Pika',
     lead: 'Sign in with the same email or Telegram username you used on the website.',
     account: 'Account',
-    accountPlaceholder: 'Email or @username',
+    accountPlaceholder: 'Email or Telegram username',
     password: 'Password',
     passwordPlaceholder: 'Password',
     submit: 'Sign in',

@@ -8,9 +8,15 @@
             <!-- 消息消费组件 -->
             <MessageConsumer />
 
-            <!-- 主路由视图 -->
+            <!-- 主路由视图：未登录不走路由，避免空白页把登录页吃掉 -->
             <div class="app-container">
-              <router-view />
+              <div v-if="fatalError" class="boot-error">
+                <h1>Pika</h1>
+                <p>{{ fatalError }}</p>
+                <button type="button" @click="recoverToLogin">回到登录</button>
+              </div>
+              <PikaLoginView v-else-if="!pikaAccountStore.loggedIn" :key="loginKey" />
+              <router-view v-else />
             </div>
 
             <!-- Linux/macOS：sudo 密码输入弹窗（全局，可从托盘/自动启动流程唤起） -->
@@ -26,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount } from 'vue'
+import { computed, onMounted, onBeforeUnmount, onErrorCaptured, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -48,6 +54,8 @@ import {
 import MessageConsumer from '@/components/MessageConsumer.vue'
 import UpdateNotification from '@/components/UpdateNotification.vue'
 import SudoPasswordModal from '@/components/system/SudoPasswordModal.vue'
+import PikaLoginView from '@/views/PikaLoginView.vue'
+import { clearSession } from '@/services/pika-account-service'
 import { useAppBootstrap } from '@/boot/useAppBootstrap'
 import { eventService } from '@/services/event-service'
 import { APP_EVENTS } from '@/constants/events'
@@ -72,6 +80,22 @@ const connectionStore = useConnectionStore()
 const logStore = useLogStore()
 const configProviderTheme = computed(() => themeStore.naiveTheme)
 const themeOverrides = computed(() => themeStore.themeOverrides)
+const fatalError = ref('')
+const loginKey = ref(0)
+
+onErrorCaptured((err) => {
+  fatalError.value = err instanceof Error ? err.message : String(err)
+  console.error('界面渲染失败:', err)
+  return false
+})
+
+const recoverToLogin = async () => {
+  clearSession()
+  pikaAccountStore.hydrate()
+  loginKey.value += 1
+  fatalError.value = ''
+  await router.replace('/login')
+}
 
 const cleanupFunctions: (() => void)[] = []
 let sudoPromptRunning = false
@@ -185,6 +209,10 @@ onMounted(async () => {
   cleanupFunctions.push(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload)
   })
+  pikaAccountStore.hydrate()
+  if (router.currentRoute.value.path === '/blank') {
+    await router.replace(pikaAccountStore.loggedIn ? '/' : '/login')
+  }
 
   try {
     const { initialize, cleanup: cleanupBootstrap } = useAppBootstrap({
@@ -307,5 +335,37 @@ onBeforeUnmount(() => {
 .app-container {
   height: 100%;
   width: 100%;
+}
+
+.boot-error {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 32px;
+  background: #eef2f7;
+  color: #0f172a;
+}
+
+.boot-error h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+}
+
+.boot-error p {
+  margin: 0 0 16px;
+  color: #b42318;
+  max-width: 480px;
+}
+
+.boot-error button {
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #4f46e5;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
 }
 </style>
