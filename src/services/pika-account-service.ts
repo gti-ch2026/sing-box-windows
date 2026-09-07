@@ -60,6 +60,18 @@ function unwrapToken(raw: string): string {
   return value.startsWith('Bearer ') ? value : value
 }
 
+// 统一 fetch：网络层异常翻译成用户能看懂的中文，别让 "Failed to fetch" 裸奔
+async function fetchOrThrow(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(10000) })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      throw new Error(`连接超时，请确认控制面可访问：${controlPlaneBase()}`)
+    }
+    throw new Error(`控制面连不上，请确认服务已启动：${controlPlaneBase()}`)
+  }
+}
+
 async function postJson(path: string, body: unknown, token?: string): Promise<Record<string, unknown>> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -70,11 +82,10 @@ async function postJson(path: string, body: unknown, token?: string): Promise<Re
       ? unwrapToken(token)
       : `Bearer ${unwrapToken(token)}`
   }
-  const response = await fetch(`${controlPlaneBase().replace(/\/$/, '')}${path}`, {
+  const response = await fetchOrThrow(`${controlPlaneBase().replace(/\/$/, '')}${path}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(20000),
   })
   const json = (await response.json().catch(() => ({}))) as Record<string, unknown>
   if (!response.ok || json.status === 'fail') {
@@ -85,9 +96,8 @@ async function postJson(path: string, body: unknown, token?: string): Promise<Re
 
 async function getJson(path: string, token: string): Promise<Record<string, unknown>> {
   const auth = unwrapToken(token).startsWith('Bearer ') ? unwrapToken(token) : `Bearer ${unwrapToken(token)}`
-  const response = await fetch(`${controlPlaneBase().replace(/\/$/, '')}${path}`, {
+  const response = await fetchOrThrow(`${controlPlaneBase().replace(/\/$/, '')}${path}`, {
     headers: { Accept: 'application/json', Authorization: auth },
-    signal: AbortSignal.timeout(20000),
   })
   const json = (await response.json().catch(() => ({}))) as Record<string, unknown>
   if (!response.ok || json.status === 'fail') {
