@@ -17,6 +17,15 @@ export default {
     enabled: 'Вкл',
     disabled: 'Выкл',
   },
+  login: {
+    brand: 'Pika',
+    lead: 'Войдите тем же email или Telegram-именем, что и на сайте.',
+    account: 'Аккаунт',
+    accountPlaceholder: 'Email или имя Telegram',
+    password: 'Пароль',
+    passwordPlaceholder: 'Пароль',
+    submit: 'Войти',
+  },
 
   // 导航菜单
   nav: {
@@ -48,13 +57,23 @@ export default {
 
   // 首页
   home: {
+    quotaTitle: 'Остаток',
+    quotaPlan: 'Тариф',
+    quotaExpire: 'Истекает',
+    quotaUsed: 'Использовано',
+    quotaRemaining: 'Осталось',
+    quotaUnlimited: 'Безлимит',
     kernelHealthy: 'Kernel healthy',
     kernelUnhealthy: 'Kernel has issues',
     kernelCheckedAt: 'Last checked',
     noIssues: 'No issues',
     // 基础操作
-    start: 'Запуск',
-    stop: 'Остановка',
+    start: 'Включить',
+    stop: 'Выключить',
+    startSuccess: 'Прокси включён',
+    stopSuccess: 'Прокси выключен',
+    startFailed: 'Не удалось включить',
+    stopFailed: 'Не удалось выключить',
     restart: 'Перезапуск',
     restartAsAdmin: 'Перезапуск от имени администратора',
 
@@ -90,7 +109,7 @@ export default {
     status: {
       startingDesc: 'Запуск ядра, пожалуйста подождите...',
       stoppingDesc: 'Остановка ядра, пожалуйста подождите...',
-      runningDesc: 'Ядро запущено, сервис прокси доступен',
+      runningDesc: 'Включено. Браузеры идут через системный прокси; Telegram — через полный туннель ниже',
       stoppedDesc: 'Ядро остановлено, сервис прокси недоступен',
       disconnectedDesc: 'Ядро запущено, но соединение нарушено, пожалуйста проверьте конфигурацию',
     },
@@ -112,11 +131,11 @@ export default {
     // 代理模式
     proxyMode: {
       system: 'Системный прокси',
-      tun: 'TUN режим',
+      tun: 'Полный туннель (дополнительно)',
       manual: 'Ручной режим',
-      systemTip: 'Автоматическая настройка системного прокси',
+      systemTip: 'Браузеры работают сразу, пароль компьютера не нужен',
       tunTip:
-        'Использовать виртуальную сетевую карту TUN для проксирования всего трафика, требуются права администратора',
+        'Все приложения, включая Telegram. Пароль нужен только при ручном включении; при следующем запуске само не включится',
       manualTip: 'Требуется ручная настройка системного прокси',
     },
 

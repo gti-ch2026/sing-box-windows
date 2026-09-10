@@ -224,6 +224,9 @@ export const useWindowStore = defineStore(
     // 保存路由状态并切换到空白页
     const saveRouteAndGoBlank = (router: Router) => {
       const currentPath = router.currentRoute.value.path
+      if (currentPath === '/login') {
+        return
+      }
 
       // 只有当前路径不是空白页时才保存
       if (currentPath !== '/blank') {

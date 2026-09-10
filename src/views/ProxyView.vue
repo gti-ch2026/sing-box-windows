@@ -4,7 +4,6 @@
       <template #tabs>
         <n-tabs v-model:value="proxyStore.viewTab" type="segment" size="small">
           <n-tab-pane name="groups" :tab="labels.groupsTab" />
-          <n-tab-pane name="providers" :tab="labels.providersTab" />
         </n-tabs>
       </template>
       <template #filters>
@@ -60,13 +59,13 @@
 
       <div class="node-panel">
         <div class="node-toolbar">
-          <n-input v-model:value="searchQuery" size="small" :placeholder="t('proxy.searchNode')" clearable>
+          <n-input class="node-search" v-model:value="searchQuery" size="small" :placeholder="t('proxy.searchNode')" clearable>
             <template #prefix>
               <n-icon><SearchOutline /></n-icon>
             </template>
           </n-input>
-          <n-select v-model:value="proxyStore.ordering" size="small" :options="orderingOptions" style="width: 120px" />
-          <n-button size="small" quaternary :type="favoritesOnly ? 'primary' : 'default'" @click="favoritesOnly = !favoritesOnly">
+          <n-select class="node-order" v-model:value="proxyStore.ordering" size="small" :options="orderingOptions" />
+          <n-button class="node-fav-filter" size="small" quaternary :type="favoritesOnly ? 'primary' : 'default'" @click="favoritesOnly = !favoritesOnly">
             <template #icon>
               <n-icon>
                 <Star v-if="favoritesOnly" />
@@ -74,7 +73,7 @@
               </n-icon>
             </template>
           </n-button>
-          <n-switch v-model:value="proxyStore.hideUnavailable" size="small">
+          <n-switch class="node-visibility" v-model:value="proxyStore.hideUnavailable" size="small">
             <template #checked>{{ labels.hideUnavailable }}</template>
             <template #unchecked>{{ labels.showAll }}</template>
           </n-switch>
@@ -332,7 +331,7 @@ const labels = computed(() => ({
   groupsTab: locale.value.startsWith('zh') ? '代理组' : 'Groups',
   providersTab: locale.value.startsWith('zh') ? 'Providers' : 'Providers',
   hideUnavailable: locale.value.startsWith('zh') ? '隐藏不可用' : 'Hide',
-  showAll: locale.value.startsWith('zh') ? '显示全部' : 'Show',
+  showAll: locale.value.startsWith('zh') ? '全部' : 'All',
   recommended: locale.value.startsWith('zh') ? '推荐:' : 'Rec:',
   favorites: locale.value.startsWith('zh') ? '收藏:' : 'Fav:',
   nodeCount: locale.value.startsWith('zh') ? '节点:' : 'Nodes:',
@@ -625,10 +624,31 @@ if (!proxyStore.proxyGroups.length) {
 .node-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
+  gap: 8px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--panel-border);
   flex-shrink: 0;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.node-search {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+.node-order {
+  flex: 0 0 96px;
+  width: 96px;
+}
+
+.node-fav-filter,
+.node-visibility {
+  flex: 0 0 auto;
+}
+
+.node-visibility {
+  white-space: nowrap;
 }
 
 .node-summary {

@@ -244,7 +244,15 @@ async fn update_subscription_userinfo(
         let url_match = !trimmed_url.is_empty() && sub.url.trim() == trimmed_url;
 
         if path_match || url_match {
+            let rewritten = rewrite_stale_pika_subscribe_url(trimmed_url);
+            if rewritten != sub.url {
+                sub.url = rewritten;
+            }
             sub.last_update = Some(now_ms);
+            sub.auto_update_fail_count = Some(0);
+            sub.last_auto_update_error = None;
+            sub.last_auto_update_error_type = None;
+            sub.last_auto_update_backoff_until = None;
             if let Some(info) = &userinfo {
                 sub.subscription_upload = info.upload;
                 sub.subscription_download = info.download;
@@ -296,9 +304,9 @@ pub async fn download_subscription(
     }
 
     let target_path = resolve_target_config_path(file_name, config_path)?;
-    let trimmed_url = url.trim();
+    let trimmed_url = rewrite_stale_pika_subscribe_url(url.trim());
     let userinfo = download_and_process_subscription(
-        trimmed_url,
+        &trimmed_url,
         use_original_config,
         app_handle,
         &app_config,
@@ -326,7 +334,7 @@ pub async fn download_subscription(
     }
 
     if let Err(e) =
-        update_subscription_userinfo(app_handle, &target_path, trimmed_url, userinfo.clone()).await
+        update_subscription_userinfo(app_handle, &target_path, &trimmed_url, userinfo.clone()).await
     {
         warn!("同步订阅信息失败: {}", e);
     }
@@ -496,6 +504,21 @@ pub async fn toggle_proxy_mode(app_handle: AppHandle, mode: String) -> Result<St
 #[tauri::command]
 pub async fn get_current_proxy_mode(app_handle: AppHandle) -> Result<String, String> {
     mode::get_current_proxy_mode_impl(app_handle).await
+}
+
+fn rewrite_stale_pika_subscribe_url(url: &str) -> String {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return url.to_string();
+    };
+    let host = parsed.host_str().unwrap_or_default();
+    if !host.ends_with(".ngrok-free.app") && !host.ends_with(".ngrok.io") {
+        return url.to_string();
+    }
+    let path = parsed.path();
+    if !path.starts_with("/s/") {
+        return url.to_string();
+    }
+    format!("http://127.0.0.1:7001{path}")
 }
 
 async fn download_and_process_subscription(

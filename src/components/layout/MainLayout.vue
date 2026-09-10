@@ -75,6 +75,7 @@ import {
   SettingsOutline,
   FolderOutline,
   AnalyticsOutline,
+  PersonOutline,
 } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
 import mitt from 'mitt'
@@ -146,6 +147,7 @@ const currentMenu = computed(() => {
   if (path === '/' || path === '/home') return 'home'
 
   const pathToMenuMap: Record<string, string> = {
+    '/account': 'account',
     '/log': 'logs',
     '/sub': 'subscription',
     '/setting': 'settings',
@@ -158,6 +160,7 @@ const currentMenu = computed(() => {
 
 const menuItems = computed<NavItem[]>(() => [
   { label: t('nav.home'), key: 'home', icon: HomeOutline },
+  { label: t('nav.account'), key: 'account', icon: PersonOutline },
   { label: t('nav.subscription'), key: 'subscription', icon: FolderOutline },
   { label: t('nav.proxy'), key: 'proxy', icon: SwapHorizontalOutline },
   { label: t('nav.connections'), key: 'connections', icon: LinkOutline },
@@ -172,6 +175,7 @@ const onSelect = (key: string) => {
     router.push('/')
   } else {
     const routeMap: Record<string, string> = {
+      account: '/account',
       logs: '/log',
       subscription: '/sub',
       settings: '/setting',

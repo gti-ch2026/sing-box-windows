@@ -29,6 +29,8 @@ pub mod system {
     pub mod sudo_service;
     pub mod system_service;
     pub mod update_service;
+    pub mod vpn_conflict;
+    pub mod compat_proxy;
 }
 
 // Tray services
@@ -46,6 +48,7 @@ pub use system::startup_restore_service;
 pub use system::startup_refresh_service;
 pub use system::system_service;
 pub use system::update_service;
+pub use system::vpn_conflict;
 pub use tray as tray_service;
 
 // Re-export storage service

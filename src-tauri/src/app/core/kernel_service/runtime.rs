@@ -2,7 +2,9 @@
 use crate::app::core::kernel_service::event::{
     cleanup_event_relay_tasks, start_websocket_relay, SHOULD_STOP_EVENTS,
 };
-use crate::app::core::kernel_service::guard::{disable_kernel_guard, enable_kernel_guard};
+use crate::app::core::kernel_service::guard::{
+    disable_kernel_guard, enable_kernel_guard_with_proxy, update_guarded_proxy_flags,
+};
 use crate::app::core::kernel_service::orchestrator::execute_kernel_operation;
 use crate::app::core::kernel_service::state::{KernelState, KERNEL_STATE};
 use crate::app::core::kernel_service::status::is_kernel_running;
@@ -210,10 +212,8 @@ pub async fn resolve_proxy_runtime_state(
         match proxy_mode.as_str() {
             "system" => {
                 app_config.system_proxy_enabled = true;
-                app_config.tun_enabled = false;
             }
             "tun" => {
-                app_config.system_proxy_enabled = false;
                 app_config.tun_enabled = true;
             }
             _ => {
@@ -235,7 +235,12 @@ pub async fn resolve_proxy_runtime_state(
         ipv6_address: app_config.tun_ipv6.clone(),
         mtu: app_config.tun_mtu,
         auto_route: app_config.tun_auto_route,
-        strict_route: app_config.tun_strict_route,
+        // macOS 上 strict_route 会和系统 VPN 抢默认路由，Telegram 进得来出不去。
+        strict_route: if cfg!(target_os = "macos") {
+            false
+        } else {
+            app_config.tun_strict_route
+        },
         stack: app_config.tun_stack.clone(),
         enable_ipv6: app_config.tun_enable_ipv6,
         route_exclude_address: app_config.tun_route_exclude_address.clone(),
@@ -245,7 +250,8 @@ pub async fn resolve_proxy_runtime_state(
     let proxy_state = ProxyRuntimeState {
         proxy_port: app_config.proxy_port,
         allow_lan_access: app_config.allow_lan_access,
-        system_proxy_enabled: app_config.system_proxy_enabled,
+        // 内核在跑时系统代理必须开：Agent/浏览器都靠它。TUN 只管不走 HTTP 的 App。
+        system_proxy_enabled: app_config.system_proxy_enabled || app_config.tun_enabled,
         tun_enabled: app_config.tun_enabled,
         system_proxy_bypass: overrides
             .system_proxy_bypass
@@ -362,11 +368,14 @@ pub(super) async fn start_kernel_impl(
         });
         // 内核已在运行（端口已监听），安全地应用 OS 代理设置。
         apply_os_proxy(&resolved.proxy);
+        crate::app::system::compat_proxy::start_compat_proxy(resolved.proxy.proxy_port);
         if reactivate_guard {
-            enable_kernel_guard(
+            enable_kernel_guard_with_proxy(
                 app_handle.clone(),
                 resolved.api_port,
                 resolved.proxy.tun_enabled,
+                resolved.proxy.system_proxy_enabled,
+                resolved.proxy.proxy_port,
             )
             .await;
         }
@@ -378,6 +387,41 @@ pub(super) async fn start_kernel_impl(
     }
 
     if is_kernel_running().await.unwrap_or(false) {
+        // 上一轮 TUN 可能用 sudo 拉起，进程还在、Clash API 也通。
+        // 这时应接管，而不是当成外人杀掉——杀掉会让界面报启动失败，代理也断。
+        let api_ok = http_client::get_client()
+            .get(format!("http://127.0.0.1:{}/version", resolved.api_port))
+            .timeout(Duration::from_millis(800))
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false);
+        if api_ok {
+            KERNEL_STATE.mark_running(resolved.api_port);
+            KERNEL_STATE.update_readiness(|readiness| {
+                readiness.relay_ready = true;
+                readiness.api_ready = true;
+                readiness.process_alive = true;
+            });
+            apply_os_proxy(&resolved.proxy);
+            crate::app::system::compat_proxy::start_compat_proxy(resolved.proxy.proxy_port);
+            if reactivate_guard {
+                enable_kernel_guard_with_proxy(
+                    app_handle.clone(),
+                    resolved.api_port,
+                    resolved.proxy.tun_enabled,
+                    resolved.proxy.system_proxy_enabled,
+                    resolved.proxy.proxy_port,
+                )
+                .await;
+            }
+            info!("接管已在运行的内核进程（Clash API 可用）");
+            return Ok(serde_json::json!({
+                "success": true,
+                "message": "内核已在运行中".to_string()
+            }));
+        }
+
         if let Err(err) = try_cleanup_conflicting_kernel(&app_handle).await {
             KERNEL_STATE.mark_failed();
             let kernel_name = crate::platform::get_kernel_executable_name();
@@ -492,6 +536,17 @@ pub(super) async fn start_kernel_impl(
             // 稳定性校验通过（含 proxy_port 连通校验），此时端口已就绪，
             // 安全地开启 OS 系统代理，避免代理指向尚未监听的端口。
             apply_os_proxy(&resolved.proxy);
+            crate::app::system::compat_proxy::start_compat_proxy(resolved.proxy.proxy_port);
+            if resolved.proxy.system_proxy_enabled && !resolved.proxy.tun_enabled {
+                let report = crate::app::system::vpn_conflict::detect_vpn_conflicts(
+                    resolved.proxy.proxy_port,
+                );
+                if report.has_conflict {
+                    let summary = report.summary();
+                    warn!("系统代理已写入；默认路由仍被其他 VPN 占用: {}", summary);
+                    crate::app::system::vpn_conflict::emit_vpn_conflict(&app_handle, &summary);
+                }
+            }
 
             info!("?? 启动事件中继服务，端口: {}", resolved.api_port);
             match start_websocket_relay(app_handle.clone(), Some(resolved.api_port)).await {
@@ -502,10 +557,12 @@ pub(super) async fn start_kernel_impl(
                     });
 
                     if reactivate_guard {
-                        enable_kernel_guard(
+                        enable_kernel_guard_with_proxy(
                             app_handle.clone(),
                             resolved.api_port,
                             resolved.proxy.tun_enabled,
+                            resolved.proxy.system_proxy_enabled,
+                            resolved.proxy.proxy_port,
                         )
                         .await;
                     }
@@ -531,10 +588,12 @@ pub(super) async fn start_kernel_impl(
                     });
 
                     if reactivate_guard {
-                        enable_kernel_guard(
+                        enable_kernel_guard_with_proxy(
                             app_handle.clone(),
                             resolved.api_port,
                             resolved.proxy.tun_enabled,
+                            resolved.proxy.system_proxy_enabled,
+                            resolved.proxy.proxy_port,
                         )
                         .await;
                     }
@@ -775,6 +834,20 @@ pub async fn apply_proxy_settings(
             "message": format!("应用代理配置失败: {}", e)
         }));
     }
+    update_guarded_proxy_flags(
+        resolved.proxy.system_proxy_enabled,
+        resolved.proxy.tun_enabled,
+        resolved.proxy.proxy_port,
+    );
+    if resolved.proxy.system_proxy_enabled && !resolved.proxy.tun_enabled {
+        let report =
+            crate::app::system::vpn_conflict::detect_vpn_conflicts(resolved.proxy.proxy_port);
+        if report.has_conflict {
+            let summary = report.summary();
+            warn!("系统代理已写入；默认路由仍被其他 VPN 占用: {}", summary);
+            crate::app::system::vpn_conflict::emit_vpn_conflict(&app_handle, &summary);
+        }
+    }
 
     if let Err(e) = update_dns_strategy(&app_handle, resolved.prefer_ipv6).await {
         warn!("更新DNS策略失败: {}", e);
@@ -827,6 +900,7 @@ pub async fn kernel_restart_fast(
 
 pub async fn stop_kernel(app_handle: Option<&AppHandle>) -> Result<String, String> {
     KERNEL_STATE.set_state(KernelState::Stopping);
+    crate::app::system::compat_proxy::stop_compat_proxy();
     disable_kernel_guard().await;
     SHOULD_STOP_EVENTS.store(true, std::sync::atomic::Ordering::Relaxed);
     cleanup_event_relay_tasks().await;

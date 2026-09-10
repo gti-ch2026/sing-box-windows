@@ -1,10 +1,11 @@
 use super::common::{
-    build_dns_server_config, dns_strategy, kernel_log_output_path, node_domain_resolver_strategy,
-    normalize_default_outbound, normalize_download_detour, normalize_fake_dns_filter_mode, DNS_CN,
+    build_dns_server_config, dns_strategy, is_placeholder_node_tag, kernel_log_output_path,
+    node_domain_resolver_strategy, normalize_default_outbound, normalize_download_detour,
+    normalize_fake_dns_filter_mode, select_urltest_candidates, urltest_outbound_template, DNS_CN,
     DNS_FAKEIP, DNS_PROXY, DNS_RESOLVER, FAKE_DNS_FILTER_GLOBAL_NON_CN, PRIVATE_IP_CIDRS,
     RS_GEOIP_CN, RS_GEOSITE_ADS, RS_GEOSITE_CN, RS_GEOSITE_GEOLOCATION_NOT_CN, RS_GEOSITE_GOOGLE,
     RS_GEOSITE_NETFLIX, RS_GEOSITE_OPENAI, RS_GEOSITE_PRIVATE, RS_GEOSITE_TELEGRAM,
-    RS_GEOSITE_YOUTUBE,
+    RS_GEOSITE_YOUTUBE, TELEGRAM_DC_IP_CIDRS,
 };
 use super::config_schema::{
     CacheFileConfig, ClashApiConfig, DnsConfig, DnsServerConfig, ExperimentalConfig, LogConfig,
@@ -32,18 +33,10 @@ pub fn generate_base_config(app_config: &AppConfig) -> Value {
     let download_detour = normalize_download_detour(app_config);
 
     let mut outbounds: Vec<Value> = vec![
-        json!({
-            "type": "urltest",
-            "tag": TAG_AUTO,
-            "outbounds": [TAG_DIRECT],
-            "url": app_config.singbox_urltest_url,
-            // 保障切换节点时主动中断旧连接，避免连接数长期堆积
-            "interrupt_exist_connections": true,
-            // 缩短空闲回收时间，配合上面的中断行为防止连接滞留
-            "idle_timeout": "10m",
-            "interval": "3m",
-            "tolerance": 50
-        }),
+        urltest_outbound_template(
+            &app_config.singbox_urltest_url,
+            vec![Value::String(TAG_DIRECT.to_string())],
+        ),
         json!({
             "type": "selector",
             "tag": TAG_MANUAL,
@@ -58,27 +51,37 @@ pub fn generate_base_config(app_config: &AppConfig) -> Value {
             json!({
                 "type": "selector",
                 "tag": TAG_TELEGRAM,
-                "outbounds": [TAG_MANUAL, TAG_AUTO]
+                "outbounds": [TAG_AUTO, TAG_MANUAL],
+                "default": TAG_AUTO,
+                "interrupt_exist_connections": false
             }),
             json!({
                 "type": "selector",
                 "tag": TAG_YOUTUBE,
-                "outbounds": [TAG_MANUAL, TAG_AUTO]
+                "outbounds": [TAG_AUTO, TAG_MANUAL],
+                "default": TAG_AUTO,
+                "interrupt_exist_connections": false
             }),
             json!({
                 "type": "selector",
                 "tag": TAG_NETFLIX,
-                "outbounds": [TAG_MANUAL, TAG_AUTO]
+                "outbounds": [TAG_AUTO, TAG_MANUAL],
+                "default": TAG_AUTO,
+                "interrupt_exist_connections": false
             }),
             json!({
                 "type": "selector",
                 "tag": TAG_OPENAI,
-                "outbounds": [TAG_MANUAL, TAG_AUTO]
+                "outbounds": [TAG_AUTO, TAG_MANUAL],
+                "default": TAG_AUTO,
+                "interrupt_exist_connections": false
             }),
             json!({
                 "type": "selector",
                 "tag": TAG_GOOGLE,
-                "outbounds": [TAG_MANUAL, TAG_AUTO]
+                "outbounds": [TAG_AUTO, TAG_MANUAL],
+                "default": TAG_AUTO,
+                "interrupt_exist_connections": false
             }),
         ]);
     }
@@ -194,6 +197,7 @@ pub fn generate_base_config(app_config: &AppConfig) -> Value {
     if app_config.singbox_enable_app_groups {
         route_rules.extend([
             json!({ "rule_set": RS_GEOSITE_TELEGRAM, "outbound": TAG_TELEGRAM }),
+            json!({ "ip_cidr": TELEGRAM_DC_IP_CIDRS, "outbound": TAG_TELEGRAM }),
             json!({ "rule_set": RS_GEOSITE_YOUTUBE, "outbound": TAG_YOUTUBE }),
             json!({ "rule_set": RS_GEOSITE_NETFLIX, "outbound": TAG_NETFLIX }),
             json!({ "rule_set": RS_GEOSITE_OPENAI, "outbound": TAG_OPENAI }),
@@ -496,6 +500,17 @@ pub fn inject_nodes(
         existing_tags.insert(tag.clone());
         node_obj.insert("tag".to_string(), Value::String(tag.clone()));
 
+        // NAT / 家宽中间盒空闲几十秒就丢连接。keepalive 比默认更勤，体感更稳。
+        node_obj
+            .entry("tcp_fast_open".to_string())
+            .or_insert(json!(true));
+        node_obj
+            .entry("tcp_keep_alive".to_string())
+            .or_insert(json!("15s"));
+        node_obj
+            .entry("tcp_keep_alive_interval".to_string())
+            .or_insert(json!("15s"));
+
         // 为“节点 server 是域名”的出站补上 domain_resolver，避免出现 DNS 循环依赖：
         // - DNS_PROXY 的 DoH/DoH3 可以走代理出站（防污染/可解析被墙域名）
         // - 代理节点本身的域名用 dns_resolver（直连）解析
@@ -527,7 +542,15 @@ pub fn inject_nodes(
     // 1) 更新 TAG_AUTO(urltest) 只包含节点（避免把 direct 当作最快导致全直连）。
     // 2) 更新 TAG_MANUAL(selector) 包含自动选择 + 每个节点（不包含 direct，避免 UI 误选直连）。
     // 3) 业务分流组补齐节点列表，避免只剩“自动/手动”无法直选节点。
-    ensure_urltest_and_selector(outbounds, &group_node_tags)?;
+    // urltest 测 100+ 节点会把空闲带宽打满、切换变慢。自动组只测香港家宽精选节点，
+    // 手动列表仍保留全部节点。
+    let auto_probe_tags = select_urltest_candidates(&group_node_tags);
+    ensure_urltest_and_selector(
+        outbounds,
+        &auto_probe_tags,
+        &group_node_tags,
+        &app_config.singbox_urltest_url,
+    )?;
     ensure_app_group_selectors(outbounds, &group_node_tags)?;
 
     // 追加节点出站
@@ -555,6 +578,15 @@ fn should_include_node_in_groups(node_obj: &serde_json::Map<String, Value>) -> b
         return false;
     }
 
+    let tag = node_obj
+        .get("tag")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if is_placeholder_node_tag(tag) {
+        return false;
+    }
+
     true
 }
 
@@ -572,19 +604,12 @@ fn ensure_outbounds_array(config: &mut Value) -> Result<&mut Vec<Value>, String>
 
 fn ensure_urltest_and_selector(
     outbounds: &mut Vec<Value>,
-    node_tags: &[String],
+    auto_node_tags: &[String],
+    all_node_tags: &[String],
+    urltest_url: &str,
 ) -> Result<(), String> {
     let auto_idx = ensure_outbound_index(outbounds, TAG_AUTO, || {
-        json!({
-            "type": "urltest",
-            "tag": TAG_AUTO,
-            "outbounds": [],
-            "interrupt_exist_connections": true,
-            "idle_timeout": "10m",
-            "url": "http://cp.cloudflare.com/generate_204",
-            "interval": "3m",
-            "tolerance": 50
-        })
+        urltest_outbound_template(urltest_url, vec![])
     })?;
 
     let manual_idx = ensure_outbound_index(outbounds, TAG_MANUAL, || {
@@ -595,11 +620,10 @@ fn ensure_urltest_and_selector(
         })
     })?;
 
-    // 自动选择候选列表
-    let auto_list = if node_tags.is_empty() {
+    let auto_list = if auto_node_tags.is_empty() {
         vec![Value::String(TAG_DIRECT.to_string())]
     } else {
-        node_tags.iter().cloned().map(Value::String).collect()
+        auto_node_tags.iter().cloned().map(Value::String).collect()
     };
     {
         let auto = outbounds
@@ -607,12 +631,13 @@ fn ensure_urltest_and_selector(
             .and_then(|v| v.as_object_mut())
             .ok_or_else(|| format!("outbound(tag={}) 不是对象", TAG_AUTO))?;
         auto.insert("outbounds".to_string(), Value::Array(auto_list));
+        crate::app::singbox::common::apply_urltest_stability_settings(auto, urltest_url);
     }
 
     // 手动切换候选列表：自动选择 + 每个节点
-    let mut manual_list = Vec::<Value>::with_capacity(1 + node_tags.len());
+    let mut manual_list = Vec::<Value>::with_capacity(1 + all_node_tags.len());
     manual_list.push(Value::String(TAG_AUTO.to_string()));
-    for tag in node_tags {
+    for tag in all_node_tags {
         manual_list.push(Value::String(tag.clone()));
     }
     {
@@ -644,8 +669,8 @@ fn ensure_app_group_selectors(outbounds: &mut [Value], node_tags: &[String]) -> 
         };
 
         let mut group_list = Vec::<Value>::with_capacity(2 + node_tags.len());
-        group_list.push(Value::String(TAG_MANUAL.to_string()));
         group_list.push(Value::String(TAG_AUTO.to_string()));
+        group_list.push(Value::String(TAG_MANUAL.to_string()));
         for tag in node_tags {
             group_list.push(Value::String(tag.clone()));
         }
@@ -655,6 +680,8 @@ fn ensure_app_group_selectors(outbounds: &mut [Value], node_tags: &[String]) -> 
             .and_then(|v| v.as_object_mut())
             .ok_or_else(|| format!("outbound(tag={}) 不是对象", group_tag))?;
         group.insert("outbounds".to_string(), Value::Array(group_list));
+        group.insert("default".to_string(), json!(TAG_AUTO));
+        group.insert("interrupt_exist_connections".to_string(), json!(false));
     }
 
     Ok(())

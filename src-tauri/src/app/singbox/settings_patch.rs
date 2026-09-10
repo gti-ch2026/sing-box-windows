@@ -1,10 +1,10 @@
 use super::common::{
-    build_dns_server_config, dns_strategy, ensure_kernel_log_output, normalize_default_outbound,
-    normalize_download_detour, normalize_fake_dns_filter_mode, DNS_CN, DNS_FAKEIP, DNS_PROXY,
-    DNS_RESOLVER, FAKE_DNS_FILTER_GLOBAL_NON_CN, RS_GEOSITE_ADS, RS_GEOSITE_GEOLOCATION_NOT_CN,
-    RS_GEOSITE_GOOGLE, RS_GEOSITE_NETFLIX, RS_GEOSITE_OPENAI, RS_GEOSITE_TELEGRAM,
-    RS_GEOSITE_YOUTUBE, TAG_AUTO, TAG_DIRECT, TAG_GOOGLE, TAG_NETFLIX, TAG_OPENAI, TAG_TELEGRAM,
-    TAG_YOUTUBE,
+    apply_urltest_stability_settings, build_dns_server_config, dns_strategy, ensure_kernel_log_output,
+    normalize_default_outbound, normalize_download_detour, normalize_fake_dns_filter_mode, DNS_CN,
+    DNS_FAKEIP, DNS_PROXY, DNS_RESOLVER, FAKE_DNS_FILTER_GLOBAL_NON_CN, RS_GEOSITE_ADS,
+    RS_GEOSITE_GEOLOCATION_NOT_CN, RS_GEOSITE_GOOGLE, RS_GEOSITE_NETFLIX, RS_GEOSITE_OPENAI,
+    RS_GEOSITE_TELEGRAM, RS_GEOSITE_YOUTUBE, TAG_AUTO, TAG_DIRECT, TAG_GOOGLE, TAG_NETFLIX,
+    TAG_OPENAI, TAG_TELEGRAM, TAG_YOUTUBE,
 };
 use crate::app::core::tun_profile::{
     default_tun_route_exclude_addresses, normalize_persisted_tun_route_exclude_address,
@@ -144,11 +144,7 @@ fn apply_profile_settings_if_present(config_obj: &mut Map<String, Value>, app_co
         for outbound in outbounds.iter_mut() {
             if outbound.get("tag").and_then(|t| t.as_str()) == Some(TAG_AUTO) {
                 if let Some(obj) = outbound.as_object_mut() {
-                    // 强制启用切换时中断旧连接，避免长时间后台运行连接数膨胀
-                    obj.insert("interrupt_exist_connections".to_string(), json!(true));
-                    // 缩短空闲回收时间，防止长尾连接占满列表
-                    obj.insert("idle_timeout".to_string(), json!("10m"));
-                    obj.insert("url".to_string(), json!(app_config.singbox_urltest_url));
+                    apply_urltest_stability_settings(obj, &app_config.singbox_urltest_url);
                 }
             }
         }

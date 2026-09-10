@@ -53,6 +53,7 @@
           </n-form-item>
 
           <div class="form-section-title">{{ props.t('setting.proxyAdvanced.tunTitle') }}</div>
+          <p class="setting-desc">{{ props.t('home.proxyMode.tunTip') }}</p>
 
           <div class="setting-form-grid">
             <n-form-item :label="props.t('setting.proxyAdvanced.tunMtu')">

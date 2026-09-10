@@ -1,6 +1,6 @@
 <template>
   <div class="page-shell home-page">
-    <!-- Hero 状态卡（精简：状态 + 重启，不再重复速度与统计） -->
+    <!-- Hero 状态卡：开/关代理，运行中才显示重启 -->
     <section class="hero-card" :class="statusClass">
       <div class="hero-glow"></div>
       <div class="hero-inner">
@@ -16,11 +16,19 @@
             <n-button
               :type="kernelRunning ? 'error' : 'primary'"
               :loading="kernelLoading"
-              @click="restartKernel"
+              @click="toggleProxyPower"
             >
               <template #icon>
                 <n-icon><PowerOutline /></n-icon>
               </template>
+              {{ kernelRunning ? t('home.stop') : t('home.start') }}
+            </n-button>
+            <n-button
+              v-if="kernelRunning"
+              secondary
+              :loading="kernelLoading"
+              @click="restartKernel"
+            >
               {{ t('home.restart') }}
             </n-button>
             <n-tooltip v-if="isWindowsPlatform && !isAdmin" trigger="hover">
@@ -33,6 +41,24 @@
               </template>
               {{ t('home.restartAsAdmin') }}
             </n-tooltip>
+          </div>
+        </div>
+        <div v-if="account.loggedIn" class="quota-row">
+          <div class="quota-item">
+            <span class="quota-label">{{ t('home.quotaPlan') }}</span>
+            <strong>{{ account.session?.planName || '—' }}</strong>
+          </div>
+          <div class="quota-item">
+            <span class="quota-label">{{ t('home.quotaExpire') }}</span>
+            <strong>{{ quotaExpireText }}</strong>
+          </div>
+          <div class="quota-item">
+            <span class="quota-label">{{ t('home.quotaUsed') }}</span>
+            <strong>{{ quotaUsedText }}</strong>
+          </div>
+          <div class="quota-item">
+            <span class="quota-label">{{ t('home.quotaRemaining') }}</span>
+            <strong>{{ quotaRemainingText }}</strong>
           </div>
         </div>
       </div>
@@ -84,20 +110,6 @@
           {{ systemProxyEnabled ? t('common.enabled') : t('common.disabled') }}
         </span>
       </button>
-      <button
-        class="quick-btn"
-        :class="{ on: tunProxyEnabled }"
-        :disabled="modeSwitchPending"
-        @click="toggleTunProxy(!tunProxyEnabled)"
-      >
-        <div class="quick-icon" :class="tunProxyEnabled ? 'green' : 'gray'">
-          <n-icon :size="20"><FlashOutline /></n-icon>
-        </div>
-        <span class="quick-label">{{ t('home.proxyMode.tun') }}</span>
-        <span class="quick-state" :class="tunProxyEnabled ? 'on' : 'off'">
-          {{ tunProxyEnabled ? t('common.enabled') : t('common.disabled') }}
-        </span>
-      </button>
       <button class="quick-btn" @click="cycleNodeProxyMode">
         <div class="quick-icon blue">
           <n-icon :size="20"><RadioOutline /></n-icon>
@@ -126,8 +138,10 @@
       <SectionCard class="info-panel">
         <div class="info-grid">
           <div class="info-item">
-            <span class="info-label">{{ t('home.quick.proxyAddr') }}</span>
-            <code class="info-value">{{ proxyAddress }}</code>
+            <span class="info-label">{{ t('home.wsStatus.connected') }}</span>
+            <code class="info-value">{{
+              kernelRunning ? t('status.running') : t('status.stopped')
+            }}</code>
           </div>
           <div class="info-item">
             <span class="info-label">{{ t('nav.connections') }}</span>
@@ -150,11 +164,6 @@
     <!-- 代理模式详细开关区 -->
     <div class="bottom-grid">
       <SectionCard>
-        <template #actions>
-          <n-button size="tiny" quaternary @click="showPortModal = true">
-            {{ t('common.edit') }}
-          </n-button>
-        </template>
         <div class="toggle-list">
           <div class="toggle-item" :class="{ active: systemProxyEnabled }">
             <div class="toggle-icon">
@@ -162,7 +171,7 @@
             </div>
             <div class="toggle-info">
               <span class="toggle-name">{{ t('home.proxyMode.system') }}</span>
-              <code class="toggle-port">{{ proxyAddress }}</code>
+              <span class="toggle-desc">{{ t('home.proxyMode.systemTip') }}</span>
             </div>
             <n-switch
               :value="systemProxyEnabled"
@@ -188,27 +197,8 @@
           </div>
         </div>
       </SectionCard>
-
-      <SectionCard>
-        <div class="mode-chips-wrap">
-          <div class="mode-chips-title">{{ t('home.proxyHeader.nodeMode') }}</div>
-          <div class="mode-chips">
-            <div
-              v-for="mode in nodeProxyModes"
-              :key="mode.value"
-              class="mode-chip"
-              :class="{ active: currentNodeProxyMode === mode.value }"
-              @click="handleNodeProxyModeChange(mode.value)"
-            >
-              <n-icon :size="15"><component :is="mode.icon" /></n-icon>
-              <span>{{ t(mode.nameKey) }}</span>
-            </div>
-          </div>
-        </div>
-      </SectionCard>
     </div>
 
-    <PortSettingsDialog v-model:show="showPortModal" />
   </div>
 </template>
 
@@ -225,6 +215,7 @@ import {
   SpeedometerOutline,
 } from '@vicons/ionicons5'
 import { useAppStore } from '@/stores'
+import { usePikaAccountStore } from '@/stores/pika/AccountStore'
 import { useKernelStore } from '@/stores/kernel/KernelStore'
 import { useTrafficStore } from '@/stores/kernel/TrafficStore'
 import { useConnectionStore } from '@/stores/kernel/ConnectionStore'
@@ -233,7 +224,6 @@ import { kernelService } from '@/services/kernel-service'
 import { proxyService } from '@/services/proxy-service'
 import { sudoService } from '@/services/sudo-service'
 import { systemService } from '@/services/system-service'
-import PortSettingsDialog from '@/components/common/PortSettingsDialog.vue'
 import TrafficChart from '@/components/layout/TrafficChart.vue'
 import SectionCard from '@/components/common/SectionCard.vue'
 import { useKernelStatus } from '@/composables/useKernelStatus'
@@ -247,6 +237,7 @@ defineOptions({
 const { t } = useI18n()
 const message = useMessage()
 const dialog = useDialog()
+const account = usePikaAccountStore()
 
 const appStore = useAppStore()
 const kernelStore = useKernelStore()
@@ -265,7 +256,6 @@ const isAdmin = ref(false)
 const platform = ref<'windows' | 'linux' | 'macos' | 'unknown'>('unknown')
 const currentNodeProxyMode = ref('rule')
 const modeSwitchPending = ref(false)
-const showPortModal = ref(false)
 const quickTesting = ref(false)
 
 const isWindowsPlatform = computed(() => platform.value === 'windows')
@@ -310,9 +300,21 @@ const statusDescription = computed(() => {
   }
 })
 
+const quotaExpireText = computed(() => {
+  const expireAt = account.session?.expireAt ?? 0
+  if (expireAt <= 0) return '—'
+  return new Date(expireAt * 1000).toLocaleDateString()
+})
+const quotaUsedText = computed(() => formatBytes(account.usedBytes))
+const quotaRemainingText = computed(() => {
+  if (!account.session || account.session.totalBytes <= 0) {
+    return t('home.quotaUnlimited')
+  }
+  return formatBytes(account.remainingBytes)
+})
+
 const systemProxyEnabled = computed(() => appStore.systemProxyEnabled)
 const tunProxyEnabled = computed(() => appStore.tunEnabled)
-const proxyAddress = computed(() => `127.0.0.1:${appStore.proxyPort}`)
 
 const nodeProxyModes = [
   {
@@ -482,8 +484,35 @@ const enableTunWithKernelRestart = async (options?: { allowSudoRetry?: boolean }
   }
 }
 
+const resolvePlatform = async () => {
+  try {
+    const raw = await systemService.getPlatformInfo()
+    if (raw === 'windows' || raw === 'linux' || raw === 'macos') {
+      platform.value = raw
+      return raw
+    }
+  } catch {
+    // fall through to UA
+  }
+  const ua = navigator.userAgent.toLowerCase()
+  if (ua.includes('mac')) {
+    platform.value = 'macos'
+    return 'macos'
+  }
+  if (ua.includes('windows')) {
+    platform.value = 'windows'
+    return 'windows'
+  }
+  if (ua.includes('linux')) {
+    platform.value = 'linux'
+    return 'linux'
+  }
+  return platform.value
+}
+
 const toggleTunProxy = async (value: boolean) => {
   if (modeSwitchPending.value) return
+  await resolvePlatform()
 
   if (value) {
     if (isWindowsPlatform.value) {
@@ -494,9 +523,12 @@ const toggleTunProxy = async (value: boolean) => {
       } else {
         await confirmTunSwitch()
       }
-    } else if (isUnixPlatform.value) {
-      const status = await sudoService.getStatus()
-      if (!status.supported) {
+    } else if (isUnixPlatform.value || platform.value === 'unknown') {
+      // 先弹密码，避免 getStatus 卡住时按钮看起来没反应。
+      const status = await sudoService
+        .getStatus()
+        .catch(() => ({ supported: true, has_saved: false }))
+      if (status.supported === false) {
         message.error(t('home.sudoPassword.unsupported'))
         return
       }
@@ -533,6 +565,44 @@ const toggleTunProxy = async (value: boolean) => {
     } finally {
       modeSwitchPending.value = false
     }
+  }
+}
+
+const toggleProxyPower = async () => {
+  if (kernelLoading.value) return
+
+  if (kernelRunning.value) {
+    try {
+      await appStore.toggleTun(false)
+      await appStore.toggleSystemProxy(false)
+      await kernelStore.applyProxySettings({
+        system_proxy_enabled: false,
+        tun_enabled: false,
+      })
+      const stopped = await kernelStore.stopKernel()
+      if (stopped) {
+        message.success(t('home.stopSuccess'))
+      } else {
+        message.error(getKernelFailureText(t('home.stopFailed')))
+      }
+    } catch {
+      message.error(t('home.stopFailed'))
+    }
+    return
+  }
+
+  try {
+    await appStore.toggleTun(false)
+    await appStore.toggleSystemProxy(true)
+    await kernelStore.applyProxySettings()
+    const started = await kernelStore.restartKernel()
+    if (started) {
+      message.success(t('home.startSuccess'))
+    } else {
+      message.error(getKernelFailureText(t('home.startFailed')))
+    }
+  } catch {
+    message.error(t('home.startFailed'))
   }
 }
 
@@ -616,16 +686,12 @@ const checkAdmin = async () => {
 }
 
 onMounted(async () => {
-  try {
-    const raw = await systemService.getPlatformInfo()
-    platform.value = raw === 'windows' || raw === 'linux' || raw === 'macos' ? raw : 'unknown'
-  } catch {
-    platform.value = 'unknown'
-  }
+  await resolvePlatform()
   checkAdmin()
   await kernelStore.initializeStore()
   await proxyStore.fetchProxies().catch(() => undefined)
   await syncCurrentNodeProxyMode()
+  // 客户主路径是系统代理：开机和进首页都不要自动开 TUN，避免弹系统密码。
 })
 </script>
 
@@ -677,6 +743,37 @@ onMounted(async () => {
 
 .hero-inner {
   position: relative;
+}
+
+.quota-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.quota-item {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--primary-soft, rgba(99, 102, 241, 0.08));
+}
+
+.quota-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary, #475569);
+  margin-bottom: 4px;
+}
+
+.quota-item strong {
+  color: var(--text-primary, #0f172a);
+  font-size: 16px;
+}
+
+@media (max-width: 900px) {
+  .quota-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .hero-top {
