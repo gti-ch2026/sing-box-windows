@@ -8,6 +8,8 @@ pub mod update_service;
 pub mod config_service;
 pub mod startup_refresh_service;
 pub mod sudo_service;
+pub mod vpn_conflict;
+pub mod compat_proxy;
 
 pub use backup_service::*;
 pub use background_tasks::*;
@@ -16,3 +18,4 @@ pub use update_service::*;
 pub use config_service::*;
 pub use startup_refresh_service::*;
 pub use sudo_service::*;
+pub use vpn_conflict::*;

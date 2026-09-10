@@ -1,17 +1,22 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import Layout from '@/components/layout/MainLayout.vue'
+import PikaLoginView from '@/views/PikaLoginView.vue'
+import HomeView from '@/views/HomeView.vue'
+import { loadSession } from '@/services/pika-account-service'
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: [
-    // 空白页面 - 独立路由，用于托盘模式下减少内存占用
+    {
+      path: '/login',
+      name: 'Login',
+      component: PikaLoginView,
+      meta: { public: true },
+    },
+    // 托盘占位页不能再给用户看：启动时切过来就是一整块深蓝。
     {
       path: '/blank',
-      name: 'Blank',
-      component: () => import('@/views/BlankView.vue'),
-      meta: {
-        isBlankPage: true, // 标记为空白页面
-      },
+      redirect: '/',
     },
     // 主应用布局 - 包含所有功能页面
     {
@@ -22,7 +27,12 @@ const router = createRouter({
         {
           path: '/',
           name: 'Home',
-          component: () => import('@/views/HomeView.vue'),
+          component: HomeView,
+        },
+        {
+          path: '/account',
+          name: 'Account',
+          component: () => import('@/views/PikaAccountView.vue'),
         },
         {
           path: '/sub',
@@ -59,8 +69,17 @@ const router = createRouter({
   ],
 })
 
-// 路由守卫
-router.beforeEach((to, from, next) => {
+// 未登录只能进登录页；登录后官方线路由 Pika 账号页 / 启动流程下发
+router.beforeEach((to, _from, next) => {
+  const loggedIn = Boolean(loadSession()?.token)
+  if (!loggedIn && to.name !== 'Login') {
+    next({ name: 'Login' })
+    return
+  }
+  if (loggedIn && to.name === 'Login') {
+    next({ name: 'Home' })
+    return
+  }
   next()
 })
 

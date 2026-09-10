@@ -76,11 +76,11 @@ impl Default for AppConfig {
             tray_instance_id: None,
             system_proxy_bypass: DEFAULT_BYPASS_LIST.to_string(),
             tun_auto_route: true,
-            tun_strict_route: true,
+            tun_strict_route: false,
             tun_mtu: 1500,
             tun_ipv4: "172.19.0.1/30".to_string(),
             tun_ipv6: "fdfe:dcba:9876::1/126".to_string(),
-            tun_stack: "mixed".to_string(),
+            tun_stack: "gvisor".to_string(),
             // 新安装默认关闭：避免首次安装即启用 IPv6 TUN 造成意外行为
             tun_enable_ipv6: false,
             tun_route_exclude_address: None,
@@ -93,7 +93,7 @@ impl Default for AppConfig {
             singbox_dns_cn: "h3://dns.alidns.com/dns-query".to_string(),
             singbox_dns_resolver: "114.114.114.114".to_string(),
             singbox_urltest_url: "http://cp.cloudflare.com/generate_204".to_string(),
-            singbox_default_proxy_outbound: "manual".to_string(),
+            singbox_default_proxy_outbound: "auto".to_string(),
             singbox_block_ads: true,
             // gh-proxy 已经做加速，默认走直连下载，避免额外经过代理
             singbox_download_detour: "direct".to_string(),

@@ -17,6 +17,15 @@ export default {
     enabled: 'オン',
     disabled: 'オフ',
   },
+  login: {
+    brand: 'Pika',
+    lead: 'ウェブサイトと同じメールまたは Telegram ユーザー名でログインしてください。',
+    account: 'アカウント',
+    accountPlaceholder: 'メールまたは Telegram ユーザー名',
+    password: 'パスワード',
+    passwordPlaceholder: 'パスワード',
+    submit: 'ログイン',
+  },
 
   // 导航菜单
   nav: {
@@ -48,6 +57,12 @@ export default {
 
   // 首页
   home: {
+    quotaTitle: '残り容量',
+    quotaPlan: 'プラン',
+    quotaExpire: '期限',
+    quotaUsed: '使用量',
+    quotaRemaining: '残り',
+    quotaUnlimited: '無制限',
     kernelHealthy: 'Kernel healthy',
     kernelUnhealthy: 'Kernel has issues',
     kernelCheckedAt: 'Last checked',
@@ -55,6 +70,10 @@ export default {
     // 基础操作
     start: '起動',
     stop: '停止',
+    startSuccess: 'プロキシを開始しました',
+    stopSuccess: 'プロキシを停止しました',
+    startFailed: '開始に失敗しました',
+    stopFailed: '停止に失敗しました',
     restart: '再起動',
     restartAsAdmin: '管理者として再起動',
 
@@ -90,7 +109,7 @@ export default {
     status: {
       startingDesc: 'カーネルを起動中です、お待ちください...',
       stoppingDesc: 'カーネルを停止中です、お待ちください...',
-      runningDesc: 'カーネルが実行中、プロキシサービスが利用可能',
+      runningDesc: '起動済み。ブラウザはシステムプロキシ。Telegram などは下の「全体接管」を開いてください',
       stoppedDesc: 'カーネルが停止しています、プロキシサービスは利用できません',
       disconnectedDesc: 'カーネルは起動していますが接続に異常があります、設定を確認してください',
     },
@@ -109,10 +128,10 @@ export default {
     // 流量代理模式
     proxyMode: {
       system: 'システムプロキシ',
-      tun: 'TUNモード',
+      tun: '全体接管（上級）',
       manual: '手動モード',
-      systemTip: 'システムプロキシを自動設定',
-      tunTip: 'TUN仮想ネットワークカードを使用してすべてのトラフィックをプロキシ、管理者権限が必要',
+      systemTip: 'ブラウザはすぐ使えます。パソコンのパスワードは不要です',
+      tunTip: 'Telegram など全アプリが代理経由になります。システムパスワードが必要で、次回起動では自動で開きません',
       manualTip: '手動でのシステムプロキシ設定が必要',
     },
 
@@ -141,7 +160,7 @@ export default {
     sudoPassword: {
       title: 'システムパスワードが必要です',
       description:
-        '初回の TUN 有効化には sudo 権限でカーネルを起動する必要があります。パスワードはローカルデータベースに暗号化して保存され、アップロードされません。',
+        '全体接管は手動で開いたときだけシステムパスワードが必要です。次回起動では自動で開きません。パスワードは本機にだけ保存し、アップロードしません。',
       placeholder: 'システムパスワードを入力',
       save: '保存して続行',
       saved: 'システムパスワードを保存しました',

@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
+import { rewriteStaleSubscribeUrl } from '@/services/pika-account-service'
 import { DatabaseService } from '@/services/database-service'
 import type { Subscription } from '@/types/database'
 import mitt from '@/utils/mitt'
@@ -15,7 +16,7 @@ export const useSubStore = defineStore(
     const convertToFrontendFormat = (backendSubs: Subscription[]): FrontendSubscription[] => {
       return backendSubs.map((sub) => ({
         name: sub.name,
-        url: sub.url,
+        url: rewriteStaleSubscribeUrl(sub.url),
         isLoading: sub.is_loading,
         lastUpdate: sub.last_update || undefined,
         isManual: sub.is_manual,

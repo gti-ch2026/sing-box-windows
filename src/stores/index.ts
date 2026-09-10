@@ -20,6 +20,7 @@ export * from './kernel/RulesStore'
 
 // 导出订阅相关Store
 export * from './subscription/SubStore'
+export * from './pika/AccountStore'
 
 // 导出系统托盘Store
 export * from './tray/TrayStore'

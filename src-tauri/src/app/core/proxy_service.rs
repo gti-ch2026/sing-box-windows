@@ -146,19 +146,24 @@ pub fn apply_os_proxy(state: &ProxyRuntimeState) {
         } else {
             bypass.to_string()
         };
-        match enable_system_proxy(
-            network_config::DEFAULT_CLASH_API_ADDRESS,
-            state.proxy_port,
-            Some(normalized_bypass.as_str()),
-        ) {
-            Ok(()) => info!(
-                "系统代理已启用，端口 {}，绕过列表: {}",
-                state.proxy_port, normalized_bypass
-            ),
-            Err(e) => warn!("设置系统代理失败: {}", e),
-        }
-    } else if let Err(err) = disable_system_proxy() {
-        warn!("关闭系统代理失败: {}", err);
+        let host = network_config::DEFAULT_CLASH_API_ADDRESS.to_string();
+        let port = state.proxy_port;
+        // networksetup 扫网卡会阻塞 UI 线程，放到后台，避免首页卡在「启动中」。
+        std::thread::spawn(move || {
+            match enable_system_proxy(&host, port, Some(normalized_bypass.as_str())) {
+                Ok(()) => info!(
+                    "系统代理已启用，端口 {}，绕过列表: {}",
+                    port, normalized_bypass
+                ),
+                Err(e) => warn!("设置系统代理失败: {}", e),
+            }
+        });
+    } else {
+        std::thread::spawn(|| {
+            if let Err(err) = disable_system_proxy() {
+                warn!("关闭系统代理失败: {}", err);
+            }
+        });
     }
 }
 
@@ -207,7 +212,7 @@ pub async fn set_tun_proxy(
     let runtime_state = ProxyRuntimeState {
         proxy_port: port,
         allow_lan_access,
-        system_proxy_enabled: false,
+        system_proxy_enabled: true,
         tun_enabled: true,
         system_proxy_bypass: DEFAULT_BYPASS_LIST.to_string(),
         tun_options: tun_options.unwrap_or_default(),

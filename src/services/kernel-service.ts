@@ -250,9 +250,7 @@ class KernelService {
       const overrides: Record<string, boolean> = {}
       if (mode === 'system') {
         overrides.system_proxy_enabled = true
-        overrides.tun_enabled = false
       } else if (mode === 'tun') {
-        overrides.system_proxy_enabled = false
         overrides.tun_enabled = true
       } else {
         overrides.system_proxy_enabled = false

@@ -1,0 +1,192 @@
+import { computed, ref } from 'vue'
+import { defineStore } from 'pinia'
+import {
+  clearSession,
+  loadSession,
+  loginPika,
+  refreshPikaSession,
+  rewriteStaleSubscribeUrl,
+  saveSession,
+  type PikaSession,
+} from '@/services/pika-account-service'
+import { startPikaTrafficReporter, stopPikaTrafficReporter } from '@/services/pika-traffic-reporter'
+import { subscriptionService } from '@/services/subscription-service'
+import { generateConfigFileName } from '@/views/sub/subscription-utils'
+import { useSubStore } from '@/stores/subscription/SubStore'
+import { useAppStore } from '@/stores/app/AppStore'
+import { useKernelStore } from '@/stores/kernel/KernelStore'
+
+const OFFICIAL_NAME = 'Pika 官方线路'
+
+export const usePikaAccountStore = defineStore('pika-account', () => {
+  const session = ref<PikaSession | null>(loadSession())
+  const loading = ref(false)
+  const error = ref('')
+
+  const loggedIn = computed(() => Boolean(session.value?.token && session.value.subscribeUrl))
+  const planHint = computed(() => {
+    if (!session.value) return ''
+    if (session.value.expireAt > 0) {
+      return `${session.value.planName} · ${new Date(session.value.expireAt * 1000).toLocaleDateString()}`
+    }
+    return session.value.planName
+  })
+
+  const usedBytes = computed(() => {
+    if (!session.value) return 0
+    return session.value.uploadBytes + session.value.downloadBytes
+  })
+
+  const remainingBytes = computed(() => {
+    if (!session.value) return 0
+    return Math.max(session.value.totalBytes - usedBytes.value, 0)
+  })
+
+  const applyQuota = (quota: { u?: number; d?: number; transfer_enable?: number }) => {
+    if (!session.value) return
+    session.value = {
+      ...session.value,
+      uploadBytes: Number(quota.u ?? session.value.uploadBytes),
+      downloadBytes: Number(quota.d ?? session.value.downloadBytes),
+      totalBytes: Number(quota.transfer_enable ?? session.value.totalBytes),
+    }
+    saveSession(session.value)
+  }
+
+  const hydrate = () => {
+    session.value = loadSession()
+    if (session.value) startPikaTrafficReporter()
+  }
+
+  const applyOfficialSubscription = async (next: PikaSession) => {
+    const subStore = useSubStore()
+    const appStore = useAppStore()
+    const kernelStore = useKernelStore()
+    const token = next.subscribeUrl.split('/s/')[1] || ''
+    next.subscribeUrl = rewriteStaleSubscribeUrl(next.subscribeUrl, token)
+    const result = await subscriptionService.downloadSubscription(next.subscribeUrl, false, {
+      fileName: generateConfigFileName('pika-official'),
+      applyRuntime: false,
+    })
+    for (const item of subStore.list) {
+      if (item.name === OFFICIAL_NAME) {
+        item.url = next.subscribeUrl
+      }
+    }
+    const existing = subStore.list.findIndex((item) => item.name === OFFICIAL_NAME)
+    const item = {
+      name: OFFICIAL_NAME,
+      url: next.subscribeUrl,
+      isLoading: false,
+      lastUpdate: Date.now(),
+      isManual: false,
+      useOriginalConfig: false,
+      configPath: result.configPath,
+      backupPath: `${result.configPath}.bak`,
+      autoUpdateIntervalMinutes: 360,
+      subscriptionUpload: result.subscriptionUpload,
+      subscriptionDownload: result.subscriptionDownload,
+      subscriptionTotal: result.subscriptionTotal,
+      subscriptionExpire: result.subscriptionExpire ?? next.expireAt,
+    }
+    if (existing >= 0) {
+      subStore.list[existing] = { ...subStore.list[existing], ...item }
+      await subStore.setActiveIndex(existing)
+    } else {
+      subStore.list.unshift(item)
+      await subStore.setActiveIndex(0)
+    }
+    await subscriptionService.setActiveConfig(result.configPath, { useOriginalConfig: false })
+    await appStore.setActiveConfigPath(result.configPath)
+    await appStore.toggleTun(false)
+    await appStore.toggleSystemProxy(true)
+    await kernelStore.applyProxySettings()
+    await kernelStore.restartKernel()
+  }
+
+  const login = async (identifier: string, password: string) => {
+    loading.value = true
+    error.value = ''
+    try {
+      const next = await loginPika(identifier, password)
+      session.value = next
+      startPikaTrafficReporter()
+      try {
+        await applyOfficialSubscription(next)
+      } catch (err) {
+        error.value = err instanceof Error ? err.message : '登录成功，但线路还没连上'
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '登录失败'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const refresh = async () => {
+    if (!session.value?.token) return
+    const next = await refreshPikaSession(session.value.token, session.value.identifier)
+    session.value = next
+    await applyOfficialSubscription(next)
+  }
+
+  const withTimeout = async <T>(task: Promise<T>, ms: number): Promise<T | null> => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        task,
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), ms)
+        }),
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  const stopProxyInBackground = () => {
+    const kernelStore = useKernelStore()
+    const appStore = useAppStore()
+    void (async () => {
+      try {
+        await withTimeout(kernelStore.stopKernel({ force: true }), 2500)
+        await withTimeout(appStore.toggleTun(false), 1500)
+        await withTimeout(appStore.toggleSystemProxy(false), 1500)
+        await withTimeout(
+          kernelStore.applyProxySettings({
+            system_proxy_enabled: false,
+            tun_enabled: false,
+          }),
+          1500,
+        )
+      } catch (error) {
+        console.warn('退出登录后关闭代理失败:', error)
+      }
+    })()
+  }
+
+  const logout = async () => {
+    stopPikaTrafficReporter()
+    clearSession()
+    session.value = null
+    error.value = ''
+    loading.value = false
+    stopProxyInBackground()
+  }
+
+  return {
+    session,
+    loading,
+    error,
+    loggedIn,
+    planHint,
+    usedBytes,
+    remainingBytes,
+    hydrate,
+    applyQuota,
+    login,
+    refresh,
+    logout,
+  }
+})

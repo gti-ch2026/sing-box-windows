@@ -378,6 +378,16 @@ pub async fn db_get_app_config_internal<R: tauri::Runtime>(
     #[allow(unused_mut)]
     let mut config = storage.get_app_config().await.map_err(|e| e.to_string())?;
 
+    // 客户主路径默认自动选优：旧安装把 outbound 写死成 manual，卡在第一个节点上会感觉整条线路不稳。
+    if config.singbox_default_proxy_outbound != "auto" {
+        config.singbox_default_proxy_outbound = "auto".to_string();
+        if let Err(err) = storage.save_app_config(&config).await {
+            tracing::warn!("迁移默认出站为自动选择失败: {}", err);
+        } else {
+            tracing::info!("已将默认出站切换为自动选择（urltest）");
+        }
+    }
+
     // Windows：非管理员启动时自动关闭 TUN，避免因缺少权限导致内核无法拉起
     // Linux/macOS：内核可通过 sudo 提权启动（应用本身无需 root），因此不在这里强制关闭。
     #[cfg(target_os = "windows")]

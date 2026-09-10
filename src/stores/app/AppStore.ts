@@ -91,7 +91,7 @@ export const useAppStore = defineStore(
     const singboxDnsCn = ref(DEFAULT_SINGBOX_DNS_CN)
     const singboxDnsResolver = ref(DEFAULT_SINGBOX_DNS_RESOLVER)
     const singboxUrltestUrl = ref(DEFAULT_SINGBOX_URLTEST_URL)
-    const singboxDefaultProxyOutbound = ref<'manual' | 'auto'>('manual')
+    const singboxDefaultProxyOutbound = ref<'manual' | 'auto'>('auto')
     const singboxBlockAds = ref(true)
     const singboxDownloadDetour = ref<'manual' | 'direct'>('manual')
     const singboxDnsHijack = ref(true)
@@ -292,10 +292,8 @@ export const useAppStore = defineStore(
       switch (targetMode) {
         case 'system':
           systemProxyEnabled.value = true
-          tunEnabled.value = false
           break
         case 'tun':
-          systemProxyEnabled.value = false
           tunEnabled.value = true
           break
         case 'manual':

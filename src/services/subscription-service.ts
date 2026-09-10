@@ -1,3 +1,4 @@
+import { rewriteStaleSubscribeUrl } from './pika-account-service'
 import { invokeWithAppContext } from './invoke-client'
 
 export interface SubscriptionPersistOptions {
@@ -36,10 +37,11 @@ const mapPersistResult = (result: BackendSubscriptionPersistResult): Subscriptio
 
 export const subscriptionService = {
   downloadSubscription(url: string, useOriginalConfig: boolean, options: SubscriptionPersistOptions = {}) {
+    const nextUrl = rewriteStaleSubscribeUrl(url)
     return invokeWithAppContext<BackendSubscriptionPersistResult>(
       'download_subscription',
       {
-        url,
+        url: nextUrl,
         useOriginalConfig,
         fileName: options.fileName,
         configPath: options.configPath,

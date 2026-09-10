@@ -760,9 +760,6 @@ impl ProcessManager {
         let kernel_name = crate::platform::get_kernel_executable_name();
         info!("按进程名强制清理内核进程: {}", kernel_name);
 
-        #[cfg(not(target_os = "linux"))]
-        let _ = app_handle;
-
         let plain_kill_result = crate::platform::kill_processes_by_name(kernel_name)
             .await
             .map_err(|e| format!("按进程名终止内核进程失败: {}", e));
@@ -774,7 +771,7 @@ impl ProcessManager {
         }
         self.clear_managed_pid();
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             const VERIFY_ATTEMPTS: usize = 5;
             const VERIFY_INTERVAL_MS: u64 = 400;
@@ -832,7 +829,7 @@ impl ProcessManager {
             Ok(())
         }
 
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
             plain_kill_result?;
             sleep(Duration::from_millis(350)).await;

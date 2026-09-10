@@ -336,3 +336,47 @@ fn apply_app_settings_should_fallback_to_canonical_tun_route_exclude_address_def
         Some(&json!(default_tun_route_exclude_addresses()))
     );
 }
+
+#[test]
+fn apply_app_settings_should_stabilize_urltest_group() {
+    let mut config = json!({
+        "dns": { "servers": [], "rules": [] },
+        "experimental": { "clash_api": {}, "cache_file": {} },
+        "inbounds": [],
+        "outbounds": [
+            {
+                "type": "urltest",
+                "tag": "自动选择",
+                "outbounds": [
+                    "🇩🇪 德国-DE02【优化】",
+                    "🇺🇸 美国-US01【优化】",
+                    "🇭🇰 PRO-A-香港-HK07-家宽|v202605",
+                    "🇹🇼 PRO-B-台湾-TW01|v202605",
+                    "PRO-B-官网yuntijiasu.com|v202605",
+                    "🇯🇵 PRO-C-日本-JP01|v202605"
+                ],
+                "interval": "30s",
+                "tolerance": 80,
+                "interrupt_exist_connections": true
+            }
+        ],
+        "route": { "rule_set": [], "rules": [], "final": "direct", "auto_detect_interface": true }
+    });
+
+    apply_app_settings_to_config(&mut config, &AppConfig::default());
+
+    let auto = config
+        .get("outbounds")
+        .and_then(|v| v.as_array())
+        .and_then(|list| list.first())
+        .expect("urltest 应存在");
+    assert_eq!(auto.get("interval").and_then(|v| v.as_str()), Some("5m"));
+    assert_eq!(auto.get("tolerance").and_then(|v| v.as_u64()), Some(400));
+    assert_eq!(
+        auto.get("interrupt_exist_connections").and_then(|v| v.as_bool()),
+        Some(false)
+    );
+    let members = auto.get("outbounds").and_then(|v| v.as_array()).unwrap();
+    assert!(!members.iter().any(|v| v.as_str().unwrap_or("").contains("官网")));
+    assert!(members.iter().any(|v| v.as_str().unwrap_or("").contains("香港")));
+}

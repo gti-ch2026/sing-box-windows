@@ -27,8 +27,8 @@
             <div class="sub-info">
               <div class="sub-name" :title="item.name">{{ item.name }}</div>
               <div class="sub-tags">
-                <n-tag size="small" :bordered="false" round>
-                  {{ item.isManual ? t('sub.manual') : t('sub.urlSubscription') }}
+                <n-tag size="small" :bordered="false" round :type="item.name === 'Pika 官方线路' ? 'info' : 'default'">
+                  {{ item.name === 'Pika 官方线路' ? 'Pika 官方' : item.isManual ? t('sub.manual') : t('sub.urlSubscription') }}
                 </n-tag>
                 <n-tag
                   v-if="subStore.activeIndex === index"
@@ -244,6 +244,7 @@ import { ref, computed, onMounted, onUnmounted, h, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { useSubStore } from '@/stores/subscription/SubStore'
 import { useAppStore } from '@/stores'
+import { rewriteStaleSubscribeUrl } from '@/services/pika-account-service'
 import { subscriptionService } from '@/services/subscription-service'
 import type { SubscriptionPersistResult } from '@/services/subscription-service'
 import { kernelService } from '@/services/kernel-service'
@@ -601,10 +602,15 @@ const refreshSubscription = async (index: number, applyRuntime = false, silent =
         persistOptions,
       )
       : await subscriptionService.downloadSubscription(
-        item.url,
+        rewriteStaleSubscribeUrl(item.url),
         item.useOriginalConfig,
         persistOptions,
       )
+    subStore.list[index].url = rewriteStaleSubscribeUrl(item.url)
+    subStore.list[index].autoUpdateFailCount = 0
+    subStore.list[index].lastAutoUpdateError = undefined
+    subStore.list[index].lastAutoUpdateErrorType = undefined
+    subStore.list[index].lastAutoUpdateBackoffUntil = undefined
 
     const savedPath = savedResult.configPath
     if (savedPath) {
@@ -743,7 +749,7 @@ const regenerateConfigFor = async (item: Subscription) => {
     return result.configPath
   }
   const result = await subscriptionService.downloadSubscription(
-    item.url,
+    rewriteStaleSubscribeUrl(item.url),
     item.useOriginalConfig,
     persistOptions,
   )
