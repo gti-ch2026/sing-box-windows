@@ -1,0 +1,62 @@
+# 临时手动构建：只出 Windows x64 安装包（NSIS + MSI），产物在 Actions Artifact 里。
+# 基于 feat/pika-closed-loop-v2 的代码，构建完可删本分支。
+name: Win Build (manual)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci/win-build
+
+jobs:
+  build:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        shell: bash
+
+      - name: Build application
+        shell: bash
+        env:
+          # 透传 token 给 fetch-kernel，避免匿名 API 限流导致 latest 拉取失败。
+          SING_BOX_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          pnpm run build
+          # 显式走 package script（tauri-wrapper），确保只注入当前 target 的内核资源
+          pnpm run tauri build --target x86_64-pc-windows-msvc
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pika-windows-x64
+          path: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 7
