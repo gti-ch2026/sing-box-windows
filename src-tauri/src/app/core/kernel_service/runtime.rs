@@ -22,6 +22,8 @@ use crate::app::storage::enhanced_storage_service::db_get_app_config;
 use crate::utils::http_client;
 use futures::FutureExt;
 use serde_json::json;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
@@ -66,6 +68,59 @@ fn classify_startup_stability_failure(detail: &str) -> (&'static str, &'static s
     } else {
         ("KERNEL_API_TIMEOUT", "kernel API not ready within stability window")
     }
+}
+
+/// cache-file 自愈防再入标记：同一时刻只允许一层自愈递归，避免失败时无限重启。
+static CACHE_FILE_HEAL_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
+/// 内核工作目录下的 cache.db 路径（-D 指向 <workdir>/sing-box，cache.db 在其中）。
+fn kernel_cache_db_path() -> PathBuf {
+    PathBuf::from(crate::utils::app_util::get_work_dir_sync())
+        .join("sing-box")
+        .join("cache.db")
+}
+
+/// 旧版本 cache.db 在内核升级后可能无法初始化（FATAL "initialize cache-file: timeout"），
+/// 表现为内核秒退 + guard 反复拉起的崩溃循环。cache.db 仅缓存规则集与选择状态，
+/// 删除后内核会自动重建。检测到该错误时清掉缓存并重试一次启动。
+async fn try_heal_cache_file_corruption(
+    app_handle: &AppHandle,
+    resolved: &ResolvedProxyState,
+    reactivate_guard: bool,
+) -> Option<serde_json::Value> {
+    if CACHE_FILE_HEAL_IN_FLIGHT.load(Ordering::SeqCst) {
+        return None;
+    }
+    CACHE_FILE_HEAL_IN_FLIGHT.store(true, Ordering::SeqCst);
+    let result = async {
+        let cache_file = kernel_cache_db_path();
+        if cache_file.exists() {
+            if let Err(e) = std::fs::remove_file(&cache_file) {
+                warn!("清除内核缓存文件失败: {}", e);
+                return None;
+            }
+        }
+        info!("检测到内核 cache-file 初始化失败，已清除缓存并重试启动");
+        let retry = Box::pin(start_kernel_impl(
+            app_handle.clone(),
+            resolved,
+            reactivate_guard,
+        ))
+        .await;
+        let succeeded = retry
+            .as_ref()
+            .ok()
+            .and_then(|v| v.get("success").and_then(|s| s.as_bool()))
+            .unwrap_or(false);
+        if succeeded {
+            retry.ok()
+        } else {
+            None
+        }
+    }
+    .await;
+    CACHE_FILE_HEAL_IN_FLIGHT.store(false, Ordering::SeqCst);
+    result
 }
 
 fn classify_runtime_start_failure(detail: &str) -> &'static str {
@@ -502,11 +557,13 @@ pub(super) async fn start_kernel_impl(
                 error!("? 内核稳定性校验失败: {}", e);
 
                 // 读取内核 stderr 输出辅助诊断
+                let mut stderr_contains_cache_error = false;
                 if let Some(stderr_output) = PROCESS_MANAGER.read_stderr_output().await {
                     let trimmed = stderr_output.trim();
                     if !trimmed.is_empty() {
                         warn!("内核 stderr 输出:\n{}", trimmed);
                     }
+                    stderr_contains_cache_error = trimmed.contains("cache-file");
                 }
 
                 KERNEL_STATE.mark_failed();
@@ -514,6 +571,20 @@ pub(super) async fn start_kernel_impl(
                 if let Err(stop_err) = PROCESS_MANAGER.stop(Some(&app_handle)).await {
                     warn!("稳定性校验失败后的进程清理失败: {}", stop_err);
                 }
+
+                // cache-file 损坏自愈：清缓存后重试一次，成功则直接返回成功结果
+                if stderr_contains_cache_error {
+                    if let Some(healed) = Box::pin(try_heal_cache_file_corruption(
+                        &app_handle,
+                        resolved,
+                        reactivate_guard,
+                    ))
+                    .await
+                    {
+                        return Ok(healed);
+                    }
+                }
+
                 emit_kernel_error_with_context(
                     &app_handle,
                     code,
