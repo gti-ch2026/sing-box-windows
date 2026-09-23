@@ -24,6 +24,8 @@ export default {
     password: '密码',
     passwordPlaceholder: '密码',
     submit: '登录',
+    goRegisterSplit: '没有账号？',
+    goRegister: '去网站注册',
   },
   nav: {
     home: '首页',

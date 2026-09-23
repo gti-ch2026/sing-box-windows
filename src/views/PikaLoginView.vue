@@ -36,6 +36,13 @@
         {{ t('login.submit') }}
       </n-button>
       <p v-if="account.error" class="err">{{ account.error }}</p>
+      <!-- 没有账号时引导到官网注册页（系统浏览器打开） -->
+      <p class="register-hint">
+        {{ t('login.goRegisterSplit') }}
+        <a role="button" tabindex="0" @click="goRegister" @keydown.enter="goRegister">
+          {{ t('login.goRegister') }}
+        </a>
+      </p>
     </form>
   </div>
 </template>
@@ -44,13 +51,24 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { usePikaAccountStore } from '@/stores/pika/AccountStore'
+import { controlPlaneBase } from '@/services/pika-account-service'
 
 const { t } = useI18n()
 const router = useRouter()
 const account = usePikaAccountStore()
 const email = ref('')
 const password = ref('')
+
+// 跳到控制面官网的注册页（Xboard SPA 的 /#/register），系统浏览器打开
+const goRegister = async () => {
+  try {
+    await openUrl(`${controlPlaneBase()}/#/register`)
+  } catch {
+    /* 打开失败时静默，登录不受影响 */
+  }
+}
 
 const onSubmit = async () => {
   if (!email.value.trim() || !password.value) return
@@ -134,6 +152,23 @@ h1 {
 .err {
   margin-top: 12px;
   color: #b42318;
+}
+.register-hint {
+  margin: 16px 0 0;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+}
+.register-hint a {
+  color: #4f46e5;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.register-hint a:hover,
+.register-hint a:focus-visible {
+  text-decoration: underline;
+  outline: none;
 }
 :deep(.n-button),
 :deep(.n-button .n-button__content) {

@@ -25,6 +25,8 @@ export default {
     password: 'パスワード',
     passwordPlaceholder: 'パスワード',
     submit: 'ログイン',
+    goRegisterSplit: 'アカウントがない方は',
+    goRegister: '公式サイトで登録',
   },
 
   // 导航菜单

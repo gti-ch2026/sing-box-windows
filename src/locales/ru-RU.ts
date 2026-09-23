@@ -25,6 +25,8 @@ export default {
     password: 'Пароль',
     passwordPlaceholder: 'Пароль',
     submit: 'Войти',
+    goRegisterSplit: 'Нет аккаунта?',
+    goRegister: 'Зарегистрируйтесь на сайте',
   },
 
   // 导航菜单

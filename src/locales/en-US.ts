@@ -24,6 +24,8 @@ export default {
     password: 'Password',
     passwordPlaceholder: 'Password',
     submit: 'Sign in',
+    goRegisterSplit: 'No account?',
+    goRegister: 'Register on the website',
   },
   nav: {
     home: 'Home',
