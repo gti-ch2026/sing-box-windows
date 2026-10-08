@@ -51,6 +51,7 @@
         <button type="button" class="tg-btn" :disabled="tgStarting" @click="startTelegram">
           {{ tgStarting ? t('login.tgWaiting') : t('login.telegram') }}
         </button>
+        <p v-if="tgFailed && tgStatusText" class="tg-status err">{{ tgStatusText }}</p>
       </div>
       <div v-else class="tg-panel">
         <div v-if="!tgExpired" class="tg-qr" v-html="tgChallenge.qrSvg"></div>
