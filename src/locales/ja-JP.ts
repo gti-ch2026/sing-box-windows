@@ -27,6 +27,18 @@ export default {
     submit: 'ログイン',
     goRegisterSplit: 'アカウントがない方は',
     goRegister: '公式サイトで登録',
+    telegramOr: 'または',
+    telegram: 'Telegram でログイン',
+    tgScanHint: 'スマホの Telegram でスキャンするか、下のボタンでこの端末の Telegram を開いて確認してください',
+    tgOpen: 'Telegram で開く',
+    tgWaiting: 'Telegram の確認を待っています…',
+    tgConfirmed: '確認しました。ログインしています…',
+    tgExpired: 'QR コードの有効期限が切れました',
+    tgRefresh: '再取得',
+    tgRetrying: 'ログインサービスが一時的に利用できません。再試行しています…',
+    tgUnavailable: 'ログインサービスが一時的に利用できません。アカウントとパスワードでログインしてください',
+    tgBanned: 'この Telegram に紐付くアカウントは利用できません。管理者にお問い合わせください',
+    tgBack: 'パスワードログインに戻る',
   },
 
   // 导航菜单

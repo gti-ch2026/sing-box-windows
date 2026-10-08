@@ -43,17 +43,48 @@
           {{ t('login.goRegister') }}
         </a>
       </p>
+
+      <div class="divider"><span>{{ t('login.telegramOr') }}</span></div>
+
+      <!-- Telegram 一键登录：challenge 由控制面签发，本页轮询换票 -->
+      <div v-if="!tgChallenge" class="tg-entry">
+        <button type="button" class="tg-btn" :disabled="tgStarting" @click="startTelegram">
+          {{ tgStarting ? t('login.tgWaiting') : t('login.telegram') }}
+        </button>
+      </div>
+      <div v-else class="tg-panel">
+        <div v-if="!tgExpired" class="tg-qr" v-html="tgChallenge.qrSvg"></div>
+        <p class="tg-hint">
+          {{ tgExpired ? t('login.tgExpired') : t('login.tgScanHint') }}
+          <template v-if="!tgExpired">（{{ tgCountdown }}）</template>
+        </p>
+        <button v-if="!tgExpired" type="button" class="tg-btn" @click="openTelegram">
+          {{ t('login.tgOpen') }}
+        </button>
+        <button v-else type="button" class="tg-btn" @click="startTelegram">
+          {{ t('login.tgRefresh') }}
+        </button>
+        <p class="tg-status" :class="{ err: tgFailed }">{{ tgStatusText }}</p>
+        <a class="tg-back" role="button" tabindex="0" @click="cancelTelegram" @keydown.enter="cancelTelegram">
+          {{ t('login.tgBack') }}
+        </a>
+      </div>
     </form>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { usePikaAccountStore } from '@/stores/pika/AccountStore'
-import { controlPlaneBase } from '@/services/pika-account-service'
+import {
+  controlPlaneBase,
+  pollPikaTelegramLogin,
+  startPikaTelegramLogin,
+  type PikaTelegramChallenge,
+} from '@/services/pika-account-service'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -69,6 +100,137 @@ const goRegister = async () => {
     /* 打开失败时静默，登录不受影响 */
   }
 }
+
+const tgChallenge = ref<PikaTelegramChallenge | null>(null)
+const tgStarting = ref(false)
+const tgStatusText = ref('')
+const tgFailed = ref(false)
+const tgNow = ref(Date.now())
+let tgPollTimer: ReturnType<typeof setTimeout> | undefined
+let tgTickTimer: ReturnType<typeof setInterval> | undefined
+let tgUnavailableCount = 0
+
+const tgExpired = computed(() =>
+  Boolean(tgChallenge.value) && tgNow.value >= (tgChallenge.value?.expiresAt ?? 0),
+)
+const tgCountdown = computed(() => {
+  const remain = Math.max(0, Math.floor(((tgChallenge.value?.expiresAt ?? 0) - tgNow.value) / 1000))
+  const m = Math.floor(remain / 60)
+  const s = remain % 60
+  return `${m}:${s < 10 ? '0' : ''}${s}`
+})
+
+const stopTelegramTimers = () => {
+  if (tgPollTimer) clearTimeout(tgPollTimer)
+  if (tgTickTimer) clearInterval(tgTickTimer)
+  tgPollTimer = undefined
+  tgTickTimer = undefined
+}
+
+const openTelegram = async () => {
+  if (!tgChallenge.value) return
+  try {
+    await openUrl(tgChallenge.value.qrUrl)
+  } catch {
+    /* 打开失败时用户仍可扫码 */
+  }
+}
+
+const finishTelegram = async (authData: string, loginHint: string) => {
+  stopTelegramTimers()
+  tgStatusText.value = t('login.tgConfirmed')
+  try {
+    await account.loginWithTelegram(authData, loginHint)
+    if (account.loggedIn) {
+      await router.replace('/')
+    }
+  } catch {
+    tgChallenge.value = null
+  }
+}
+
+const pollTelegram = async () => {
+  const challenge = tgChallenge.value
+  if (!challenge) return
+  if (Date.now() >= challenge.expiresAt) {
+    stopTelegramTimers()
+    tgNow.value = Date.now()
+    return
+  }
+  let result
+  try {
+    result = await pollPikaTelegramLogin(challenge.challengeId, challenge.opaqueCode)
+  } catch (err) {
+    stopTelegramTimers()
+    tgFailed.value = true
+    tgStatusText.value = err instanceof Error ? err.message : t('login.tgUnavailable')
+    return
+  }
+  if (result.status === 'confirmed' && result.authData) {
+    await finishTelegram(result.authData, result.loginHint)
+    return
+  }
+  if (result.status === 'banned') {
+    stopTelegramTimers()
+    tgFailed.value = true
+    tgStatusText.value = t('login.tgBanned')
+    return
+  }
+  if (result.status === 'expired' || result.status === 'denied') {
+    stopTelegramTimers()
+    tgNow.value = Date.now()
+    tgChallenge.value = { ...challenge, expiresAt: 0 }
+    return
+  }
+  if (result.status === 'unavailable') {
+    tgUnavailableCount += 1
+    if (tgUnavailableCount >= 5) {
+      stopTelegramTimers()
+      tgFailed.value = true
+      tgStatusText.value = t('login.tgUnavailable')
+      return
+    }
+    tgStatusText.value = t('login.tgRetrying')
+  } else {
+    tgUnavailableCount = 0
+    tgStatusText.value = t('login.tgWaiting')
+  }
+  tgPollTimer = setTimeout(() => void pollTelegram(), 2000)
+}
+
+const startTelegram = async () => {
+  stopTelegramTimers()
+  tgStarting.value = true
+  tgFailed.value = false
+  tgUnavailableCount = 0
+  tgChallenge.value = null
+  tgStatusText.value = t('login.tgWaiting')
+  try {
+    tgChallenge.value = await startPikaTelegramLogin()
+  } catch (err) {
+    tgFailed.value = true
+    tgStatusText.value = err instanceof Error ? err.message : t('login.tgUnavailable')
+    return
+  } finally {
+    tgStarting.value = false
+  }
+  tgNow.value = Date.now()
+  tgTickTimer = setInterval(() => {
+    tgNow.value = Date.now()
+    if (tgExpired.value) stopTelegramTimers()
+  }, 1000)
+  await openTelegram()
+  tgPollTimer = setTimeout(() => void pollTelegram(), 1500)
+}
+
+const cancelTelegram = () => {
+  stopTelegramTimers()
+  tgChallenge.value = null
+  tgFailed.value = false
+  tgStatusText.value = ''
+}
+
+onUnmounted(stopTelegramTimers)
 
 const onSubmit = async () => {
   if (!email.value.trim() || !password.value) return
@@ -167,6 +329,88 @@ h1 {
 }
 .register-hint a:hover,
 .register-hint a:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 16px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.35);
+}
+.tg-entry {
+  text-align: center;
+}
+.tg-btn {
+  display: block;
+  width: 100%;
+  height: 42px;
+  border: 1px solid rgba(79, 70, 229, 0.45);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #4f46e5;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tg-btn:hover {
+  background: rgba(79, 70, 229, 0.06);
+}
+.tg-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.tg-panel {
+  text-align: center;
+}
+.tg-qr {
+  width: 180px;
+  height: 180px;
+  margin: 0 auto 12px;
+  padding: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  background: #ffffff;
+}
+.tg-qr :deep(svg) {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.tg-hint {
+  margin: 0 0 12px;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.tg-status {
+  margin: 12px 0 0;
+  color: #334155;
+  font-size: 13px;
+}
+.tg-status.err {
+  color: #b42318;
+}
+.tg-back {
+  display: inline-block;
+  margin-top: 10px;
+  color: #4f46e5;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.tg-back:hover,
+.tg-back:focus-visible {
   text-decoration: underline;
   outline: none;
 }

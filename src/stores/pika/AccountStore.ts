@@ -4,6 +4,7 @@ import {
   clearSession,
   loadSession,
   loginPika,
+  loginPikaWithTelegram,
   refreshPikaSession,
   rewriteStaleSubscribeUrl,
   saveSession,
@@ -104,20 +105,38 @@ export const usePikaAccountStore = defineStore('pika-account', () => {
     await kernelStore.restartKernel()
   }
 
+  const finalizeLogin = async (next: PikaSession) => {
+    session.value = next
+    startPikaTrafficReporter()
+    try {
+      await applyOfficialSubscription(next)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '登录成功，但线路还没连上'
+    }
+  }
+
   const login = async (identifier: string, password: string) => {
     loading.value = true
     error.value = ''
     try {
       const next = await loginPika(identifier, password)
-      session.value = next
-      startPikaTrafficReporter()
-      try {
-        await applyOfficialSubscription(next)
-      } catch (err) {
-        error.value = err instanceof Error ? err.message : '登录成功，但线路还没连上'
-      }
+      await finalizeLogin(next)
     } catch (err) {
       error.value = err instanceof Error ? err.message : '登录失败'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const loginWithTelegram = async (authData: string, loginHint: string) => {
+    loading.value = true
+    error.value = ''
+    try {
+      const next = await loginPikaWithTelegram(authData, loginHint)
+      await finalizeLogin(next)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Telegram 登录失败'
       throw err
     } finally {
       loading.value = false
@@ -186,6 +205,7 @@ export const usePikaAccountStore = defineStore('pika-account', () => {
     hydrate,
     applyQuota,
     login,
+    loginWithTelegram,
     refresh,
     logout,
   }

@@ -177,6 +177,79 @@ export async function refreshPikaSession(token: string, fallbackId = ''): Promis
   return session
 }
 
+export interface PikaTelegramChallenge {
+  challengeId: string
+  opaqueCode: string
+  qrUrl: string
+  qrSvg: string
+  botUsername: string
+  displayCode: string
+  expiresAt: number
+}
+
+export type PikaTelegramPollStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'consumed'
+  | 'expired'
+  | 'denied'
+  | 'unavailable'
+  | 'banned'
+
+export interface PikaTelegramPollResult {
+  status: PikaTelegramPollStatus
+  authData: string
+  loginHint: string
+  message: string
+}
+
+async function getJsonPublic(path: string): Promise<Record<string, unknown>> {
+  const response = await fetchOrThrow(`${controlPlaneBase().replace(/\/$/, '')}${path}`, {
+    headers: { Accept: 'application/json' },
+  })
+  return (await response.json().catch(() => ({}))) as Record<string, unknown>
+}
+
+export async function startPikaTelegramLogin(): Promise<PikaTelegramChallenge> {
+  const json = await getJsonPublic('/auth/telegram/start')
+  const challengeId = String(json.challengeId || '')
+  const opaqueCode = String(json.opaqueCode || '')
+  const qrUrl = String(json.qrUrl || '')
+  if (!challengeId || !opaqueCode || !qrUrl) {
+    throw new Error('Telegram 登录服务暂时不可用，请稍后重试或改用账号密码登录')
+  }
+  const expiresAt = Date.parse(String(json.expiresAt || '')) || Date.now() + 5 * 60 * 1000
+  return {
+    challengeId,
+    opaqueCode,
+    qrUrl,
+    qrSvg: String(json.qrSvg || ''),
+    botUsername: String(json.botUsername || ''),
+    displayCode: String(json.displayCode || ''),
+    expiresAt,
+  }
+}
+
+export async function pollPikaTelegramLogin(
+  challengeId: string,
+  opaqueCode: string,
+): Promise<PikaTelegramPollResult> {
+  const json = await getJsonPublic(
+    `/auth/telegram/status/${encodeURIComponent(challengeId)}?opaqueCode=${encodeURIComponent(opaqueCode)}`,
+  )
+  const status = String(json.status || 'pending') as PikaTelegramPollStatus
+  return {
+    status,
+    authData: String(json.auth_data || ''),
+    loginHint: String(json.loginHint || ''),
+    message: String(json.message || ''),
+  }
+}
+
+export async function loginPikaWithTelegram(authData: string, loginHint = ''): Promise<PikaSession> {
+  return refreshPikaSession(authData, loginHint)
+}
+
 export async function reportPikaTraffic(
   token: string,
   upload: number,

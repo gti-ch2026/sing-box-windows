@@ -27,6 +27,18 @@ export default {
     submit: 'Войти',
     goRegisterSplit: 'Нет аккаунта?',
     goRegister: 'Зарегистрируйтесь на сайте',
+    telegramOr: 'или',
+    telegram: 'Войти через Telegram',
+    tgScanHint: 'Отсканируйте код в Telegram на телефоне или откройте Telegram на этом устройстве для подтверждения',
+    tgOpen: 'Открыть в Telegram',
+    tgWaiting: 'Ждём подтверждения в Telegram…',
+    tgConfirmed: 'Подтверждено, выполняем вход…',
+    tgExpired: 'QR-код истёк',
+    tgRefresh: 'Получить новый',
+    tgRetrying: 'Сервис входа временно недоступен, повторяем…',
+    tgUnavailable: 'Сервис входа временно недоступен. Войдите по логину и паролю',
+    tgBanned: 'Аккаунт, привязанный к этому Telegram, недоступен. Обратитесь к администратору',
+    tgBack: 'Назад ко входу по паролю',
   },
 
   // 导航菜单
