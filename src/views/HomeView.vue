@@ -316,21 +316,6 @@ const quotaRemainingText = computed(() => {
 const systemProxyEnabled = computed(() => appStore.systemProxyEnabled)
 const tunProxyEnabled = computed(() => appStore.tunEnabled)
 
-const nodeProxyModes = [
-  {
-    value: 'global',
-    nameKey: 'home.nodeMode.global',
-    tipKey: 'home.nodeMode.globalTip',
-    icon: GlobeOutline,
-  },
-  {
-    value: 'rule',
-    nameKey: 'home.nodeMode.rule',
-    tipKey: 'home.nodeMode.ruleTip',
-    icon: RadioOutline,
-  },
-]
-
 const getKernelFailureText = (fallback: string) =>
   kernelStore.startupDiagnosisSummary || kernelStore.lastError || fallback
 
